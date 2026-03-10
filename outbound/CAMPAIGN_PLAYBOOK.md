@@ -171,7 +171,7 @@ Enrich only candidates that passed Phase 2 dedup.
 **Credit budget:** Apollo Basic = 2,500/month at $59/mo ($0.024/contact)
 **Save to:** `/tmp/{segment}_enriched.json`
 
-### Step 4B — Verify emails via Zerobounce (MANDATORY before loading to SmartLead)
+### Step 4B — Verify emails via BillionVerify (MANDATORY before loading to SmartLead)
 Apollo's "verified" flag is NOT SMTP-verified. Without this step, expect 3–11% bounce rates
 which will damage sending domain reputation.
 
@@ -188,13 +188,12 @@ python verify_emails.py \
 python verify_emails.py --file ... --out ... --include-catchall
 ```
 
-**Status guide:**
-- `valid` → safe to send ✓
-- `catch_all` → domain accepts all, can't confirm — risky, use `--include-catchall` if needed
-- `invalid` / `unknown` / `spamtrap` / `do_not_mail` → never send, auto-removed
+**Status guide (BillionVerify):**
+- `is_deliverable=True, is_catchall=False` → valid → send ✓
+- `is_catchall=True` → risky, domain accepts all mail — use `--include-catchall` if needed
+- `is_deliverable=False` → never send, auto-removed
 
-**Cost:** ~$0.008/email. 1,000 credits = $8 at zerobounce.net.
-Top up before running: credits remaining shown at start of script.
+**Credentials:** `BillionVerify_API_KEY` in `.env`. Top up at billionverify.com — credits shown at start of script.
 **Use `/tmp/{segment}_verified.json` as input to all downstream steps** (copy gen, SmartLead load, BQ sync).
 
 ---

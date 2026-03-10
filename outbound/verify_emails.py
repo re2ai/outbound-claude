@@ -1,32 +1,29 @@
 #!/usr/bin/env python3
 """
-Email verification via Zerobounce before loading leads into SmartLead.
+Email verification via BillionVerify before loading leads into SmartLead.
 
-Uses the batch endpoint (/v2/validatebatch) — 100 emails per request.
-Far fewer HTTP calls than single-email endpoint, no Cloudflare rate limit issues.
+Uses the bulk endpoint (/v1/verify/bulk) — 50 emails per request (API limit).
+Auth: BV-API-KEY header.
 
 Usage:
-  python verify_emails.py --file /tmp/ins_v3_enriched.json --out /tmp/ins_v3_verified.json
+  python verify_emails.py --file /tmp/enriched.json --out /tmp/verified.json
 
-Reads a list of enriched contacts, verifies each email via Zerobounce,
-writes two output files:
-  {out}              — contacts with status=valid (safe to send)
-  {out}.catchall.json — catch_all contacts (optional, your call)
-  {out}.removed.json  — invalid/unknown/spamtrap (do not send)
+Reads a list of enriched contacts, verifies each email via BillionVerify,
+writes three output files:
+  {out}               — contacts with is_deliverable=True, not catchall (safe to send)
+  {out}.catchall.json — catch_all domains (risky but sometimes usable)
+  {out}.removed.json  — undeliverable / unknown / disposable / role (do not send)
 
 RESUME BEHAVIOR (default):
   If output files already exist, loads them and skips already-verified emails.
   Re-running the same command is free — only pays for new emails.
   Pass --no-resume to force a full re-run.
 
-Status meanings:
-  valid       → confirmed deliverable. Send.
-  catch_all   → domain accepts all mail, can't fully verify. Risky but usable.
-  invalid     → hard bounce guaranteed. Never send.
-  unknown     → server timed out / can't verify. Skip.
-  spamtrap    → spam trap address. Never send.
-  do_not_mail → role address (info@, admin@) or known bad. Skip.
-  abuse       → known complainer. Skip.
+Status logic (using BillionVerify response fields):
+  is_deliverable=True, is_catchall=False  → valid   → send
+  is_catchall=True                        → risky   → catchall bucket (your call)
+  is_deliverable=False                    → removed → never send
+  error / timeout                         → removed → skip
 
 Cost: 1 credit per email. Check credits first:
   python verify_emails.py --credits
@@ -43,45 +40,45 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ZB_KEY  = os.getenv("ZEROBOUNCE_API_KEY")
-ZB_BASE = "https://api.zerobounce.net/v2"
-BATCH_SIZE = 100  # max per Zerobounce batch endpoint
-
-SEND_STATUSES  = {"valid"}
-RISKY_STATUSES = {"catch_all", "catch-all"}
+BV_KEY   = os.getenv("BillionVerify_API_KEY")
+BV_BASE  = "https://api.billionverify.com/v1"
+BV_HDR   = {"BV-API-KEY": BV_KEY, "Content-Type": "application/json"}
+BATCH_SIZE = 50  # BillionVerify bulk endpoint max
 
 
 def get_credits():
-    r = requests.get(f"{ZB_BASE}/getcredits", params={"api_key": ZB_KEY}, timeout=10)
+    r = requests.get(f"{BV_BASE}/credits", headers=BV_HDR, timeout=10)
     r.raise_for_status()
-    return int(r.json().get("Credits", 0))
+    return int(r.json()["data"]["credits_balance"])
 
 
 def verify_batch_api(emails):
     """
-    Verify up to 100 emails in one POST to /v2/validatebatch.
-    Returns dict of {email: {status, sub_status}}.
+    Verify up to 50 emails in one POST to /v1/verify/bulk.
+    Returns dict of {email: {is_deliverable, is_catchall, status, score}}.
     """
-    payload = {
-        "api_key": ZB_KEY,
-        "email_batch": [{"email_address": e} for e in emails],
-    }
-    r = requests.post(f"{ZB_BASE}/validatebatch", json=payload, timeout=60)
+    r = requests.post(f"{BV_BASE}/verify/bulk", headers=BV_HDR,
+                      json={"emails": emails}, timeout=60)
     r.raise_for_status()
     data = r.json()
 
     results = {}
-    for item in data.get("email_batch", []):
-        addr = item.get("address", "")
+    for item in data.get("data", {}).get("results", []):
+        addr = item.get("email", "")
         results[addr] = {
-            "status":     item.get("status", "unknown").lower(),
-            "sub_status": item.get("sub_status", ""),
+            "is_deliverable": item.get("is_deliverable", False),
+            "is_catchall":    item.get("is_catchall", False),
+            "is_disposable":  item.get("is_disposable", False),
+            "is_role":        item.get("is_role", False),
+            "status":         item.get("status", "unknown"),
+            "score":          item.get("score"),
+            "reason":         item.get("reason", ""),
         }
     return results
 
 
 def load_existing(out_path):
-    """Load already-verified contacts from existing output files. Returns (valid, risky, removed, done_emails)."""
+    """Load already-verified contacts from existing output files."""
     valid, risky, removed = [], [], []
     catchall_path = out_path.replace(".json", "") + ".catchall.json"
     removed_path  = out_path.replace(".json", "") + ".removed.json"
@@ -90,7 +87,7 @@ def load_existing(out_path):
         try:
             with open(path) as f:
                 for c in json.load(f):
-                    if c.get("_zb_status") != "error":
+                    if c.get("_bv_status") != "error":
                         bucket.append(c)
         except FileNotFoundError:
             pass
@@ -113,7 +110,7 @@ def save_outputs(out_path, valid, risky, removed, include_catchall=False):
 
 
 def verify_contacts(contacts, valid, risky, removed):
-    """Verify all contacts using batch endpoint. Appends to valid/risky/removed in place."""
+    """Verify all contacts using bulk endpoint. Appends to valid/risky/removed in place."""
     total = len(contacts)
     processed = 0
 
@@ -122,7 +119,7 @@ def verify_contacts(contacts, valid, risky, removed):
         emails = [c["email"] for c in chunk if c.get("email")]
 
         if not emails:
-            removed.extend({**c, "_zb_status": "no_email"} for c in chunk)
+            removed.extend({**c, "_bv_status": "no_email"} for c in chunk)
             processed += len(chunk)
             continue
 
@@ -132,24 +129,33 @@ def verify_contacts(contacts, valid, risky, removed):
             for contact in chunk:
                 email = contact.get("email", "")
                 if not email:
-                    removed.append({**contact, "_zb_status": "no_email"})
+                    removed.append({**contact, "_bv_status": "no_email"})
                     continue
 
                 res = results.get(email, {})
-                status     = res.get("status", "unknown")
-                sub_status = res.get("sub_status", "")
-                contact_out = {**contact, "_zb_status": status, "_zb_sub_status": sub_status}
+                is_deliverable = res.get("is_deliverable", False)
+                is_catchall    = res.get("is_catchall", False)
+                bv_status      = res.get("status", "unknown")
 
-                if status in SEND_STATUSES:
+                contact_out = {
+                    **contact,
+                    "_bv_status":      bv_status,
+                    "_bv_deliverable": is_deliverable,
+                    "_bv_catchall":    is_catchall,
+                    "_bv_score":       res.get("score"),
+                    "_bv_reason":      res.get("reason", ""),
+                }
+
+                if is_deliverable and not is_catchall:
                     valid.append(contact_out)
-                elif status in RISKY_STATUSES:
+                elif is_catchall:
                     risky.append(contact_out)
                 else:
                     removed.append(contact_out)
 
             processed += len(chunk)
             print(f"  [{processed}/{total}] valid={len(valid)} catchall={len(risky)} removed={len(removed)}")
-            time.sleep(0.5)  # small pause between batch requests
+            time.sleep(0.3)
 
         except Exception as e:
             print(f"  Batch error on chunk {chunk_start}-{chunk_start+len(chunk)}: {e} — skipping (will retry next run)")
@@ -157,22 +163,23 @@ def verify_contacts(contacts, valid, risky, removed):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Verify emails via Zerobounce (batch mode)")
-    parser.add_argument("--file",            help="Input JSON file (list of contact dicts with 'email' field)")
-    parser.add_argument("--out",             help="Output path for valid contacts")
+    parser = argparse.ArgumentParser(description="Verify emails via BillionVerify (bulk mode)")
+    parser.add_argument("--file",             help="Input JSON file (list of contact dicts with 'email' field)")
+    parser.add_argument("--out",              help="Output path for valid contacts")
     parser.add_argument("--include-catchall", action="store_true",
-                        help="Include catch_all in valid output")
-    parser.add_argument("--no-resume",       action="store_true",
+                        help="Include catch_all domains in valid output")
+    parser.add_argument("--no-resume",        action="store_true",
                         help="Ignore existing output and re-verify everything")
-    parser.add_argument("--credits",         action="store_true", help="Check remaining credits and exit")
+    parser.add_argument("--credits",          action="store_true", help="Check remaining credits and exit")
     args = parser.parse_args()
 
-    if not ZB_KEY:
-        print("ZEROBOUNCE_API_KEY not set in .env")
+    if not BV_KEY:
+        print("BillionVerify_API_KEY not set in .env")
         sys.exit(1)
 
     if args.credits:
-        print(f"Zerobounce credits remaining: {get_credits()}")
+        credits = get_credits()
+        print(f"BillionVerify credits remaining: {credits:,}")
         return
 
     if not args.file or not args.out:
@@ -195,10 +202,12 @@ def main():
         print("All contacts already verified.")
     else:
         credits = get_credits()
-        print(f"Credits remaining: {credits}")
-        print(f"Verifying {len(to_verify)} contacts in batches of {BATCH_SIZE} (~{-(-len(to_verify)//BATCH_SIZE)} requests, est. cost ~${len(to_verify)*0.008:.2f})\n")
-        if credits < len(to_verify):
-            print(f"WARNING: Only {credits} credits — autopay may top up as we go.\n")
+        n = len(to_verify)
+        batches = -(-n // BATCH_SIZE)
+        print(f"Credits remaining: {credits:,}")
+        print(f"Verifying {n} contacts in batches of {BATCH_SIZE} (~{batches} requests)\n")
+        if credits < n:
+            print(f"WARNING: Only {credits:,} credits but {n} emails to verify — top up at billionverify.com\n")
 
         verify_contacts(to_verify, valid, risky, removed)
 
@@ -212,15 +221,16 @@ def main():
     print(f"Removed (skip):        {len(removed):>5}" + (f" ({len(removed)/total*100:.1f}%)" if total else ""))
     if skipped:
         print(f"Skipped (already done): {skipped}")
+
+    catchall_path = args.out.replace(".json", "") + ".catchall.json"
+    removed_path  = args.out.replace(".json", "") + ".removed.json"
     print(f"\nValid list:   {args.out}")
-    catchall_path = args.out.replace(".json","") + ".catchall.json"
-    removed_path  = args.out.replace(".json","") + ".removed.json"
     print(f"Catch-all:    {catchall_path}")
     print(f"Removed:      {removed_path}")
 
     if total:
         print("\nStatus breakdown:")
-        for s, n in Counter(c.get("_zb_status") for c in valid + risky + removed).most_common():
+        for s, n in Counter(c.get("_bv_status") for c in valid + risky + removed).most_common():
             print(f"  {s}: {n}")
 
 

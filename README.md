@@ -38,10 +38,10 @@ OPENAI_API_KEY=your_key_here
 HUBSPOT_ACCESS_TOKEN=your_token_here
 # Get from: HubSpot → Settings → Integrations → Private Apps
 
-# Zerobounce — email verification (REQUIRED before loading any leads)
-ZEROBOUNCE_API_KEY=your_key_here
-# Get from: eng team (we have an account) or zerobounce.net
-# Top up credits at zerobounce.net before running — ~$0.008/email, pay as you go
+# BillionVerify — email verification (REQUIRED before loading any leads)
+BillionVerify_API_KEY=your_key_here
+# Get from: eng team (we have an account) — billionverify.com
+# Top up credits at billionverify.com before running — check current pricing
 
 # Slack — notifications (optional)
 slackwebhook=https://hooks.slack.com/services/...
@@ -65,7 +65,7 @@ You need read/write access to the `PLG_OUTBOUND` dataset. Ask an admin to grant 
 | `outbound/ICP_DEFINITIONS.md` | Who qualifies for each segment — read before building any list |
 | `outbound/INBOX_AUDIT.md` | How to read inbox health: connection, warmup, reputation, capacity |
 | `outbound/SEARCH_LOG.md` | Running log of every Apollo search: TAM, credits used, pages pulled |
-| `outbound/verify_emails.py` | Zerobounce verification — run after enrichment, before SmartLead load |
+| `outbound/verify_emails.py` | BillionVerify verification — run after enrichment, before SmartLead load |
 | `outbound/bq_sync.py` | Sync contacts and enrollments to BigQuery after every run |
 | `outbound/smartlead_pull.py` | Pull campaign stats, positive replies, per-campaign breakdown |
 | `outbound/.env` | Local credentials (never commit this) |
