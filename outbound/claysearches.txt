@@ -1,0 +1,79 @@
+Limit: 50000
+Size: 10, 50, 200, 500, 2
+Industries: Insurance Agencies and Brokerages, Insurance
+Include Countries: United States
+Description Keywords: commercial insurance, business insurance, commercial lines, general liability, w ... + show more
+Semantic Company Description: Sells insurance directly to local businesses
+Exclude Description Keywords: personal lines, individual, family, personal auto, homeowners, life insurance, h ... + show more
+Edit inputs
+Insurance ICP
+
+Limit: 50000
+Size: 2, 10, 50, 200, 500, 1000, 5000, 10000
+Industries: Commercial Real Estate, Leasing Non-residential Real Estate, Real Estate, Real Estate Agents and Brokers
+Include Countries: United States
+[AI filters] Industries: Real Estate and Construction
+Description Keywords: retail, shopping, leasing
+Semantic Company Description: Commercial real estate landlords and brokers who do retail
+[AI filters] Subindustries: Commercial Real Estate Development and Leasing
+[AI filters] Subindustries exclude: Residential Real Estate Development and Brokerage
+Edit inputs
+CRE ICP 
+
+
+Limit: 50000
+Size: 2, 10, 50, 200
+Include Countries: United States
+Description Keywords: managed service provider, MSP, network installation, structured cabling, low voltage, commercial security, access control, video surveillance, CCTV, voice over ip, voip, business telephone- show less
+Semantic Company Description: Provides managed IT services (MSP), structured cabling, or physical security hardware installation for local retailers, restaurants, and main street businesses. - show less
+Exclude Description Keywords: cyber security software, saas, app development, software development, staffing, recruiting, guard services, patrol, private investigator, residential security, home theater, home automation- show less
+IT Security ICP 
+
+Limit: 50000
+Size: 2, 10, 50
+Include Countries: United States
+Description Keywords: corporate catering, office catering, business catering, box lunch, drop off catering, executive lunch, boardroom catering, event catering, corporate events- show less
+Semantic Company Description: Provides off-premise catering services specifically for local businesses
+Exclude Description Keywords: wedding venue, bridal, wedding planner, personal chef, meal prep, food truck, restaurant equipment, staffing agency, party rental
+Edit inputs
+Catering ICP 
+
+Limit: 50000
+Include Countries: United States
+Description Keywords: local magazine, community news, neighborhood guide, direct mail advertising, coupon book, advertising sales, publisher, valpak, money mailer, local newspaper, print advertising- show less
+Semantic Company Description: Sells physical advertising space in local publications, magazines, or direct mailers specifically to local small businesses.
+Exclude Description Keywords: digital marketing, seo agency, social media management, web design, software, app development, global, national, book publishing, fiction, novel
+Local Media and Advertising ICP (Not digital marketing)
+
+Limit: 50000
+Size: 2, 10, 50, 200
+Industries: Facilities Services, Janitorial Services
+Include Countries: United States
+Semantic Company Description: Sells recurring janitorial and cleaning contracts specifically to local businesses, restaurants, and retail stores.
+Exclude Description Keywords: residential, maid, home cleaning, house cleaning, housekeeping, nanny, carpet cleaning, window washing, pressure washing, restoration, disaster, laundry, dry cleaning, waste management, garbage- show less
+Cleaning and Janitorial ICP 
+
+Limit: 50000
+Include Countries: United States
+Description Keywords: commercial hvac, commercial roofing, mechanical contractor, building maintenance
+Semantic Company Description: Provides maintenance, repair, or installation services specifically for retail stores, restaurants, and main street businesses.
+Exclude Description Keywords: residential, home, homeowner, kitchen, bath, remodel, janitorial, cleaning
+Edit inputs
+Facilities Services ICP 
+
+Limit: 50000
+Size: 2, 10, 50, 200
+Industries: Printing Services, Graphic Design
+Include Countries: United States
+Description Keywords: signs, signage
+Semantic Company Description: sells physical exterior signage, storefront signs, and vehicle wraps for local businesses, restaurants, and retail stores.
+Exclude Description Keywords: web design, seo, social media, digital marketing, ad agency, ux design, app development, software, offset printing, books, magazines, flyers, business cards only- sho
+Signage ICP 
+
+Limit: 50000
+Size: 2, 10, 50, 200
+Include Countries: United States
+Description Keywords: merchant services, payment processing, point of sale, POS system, credit card processing, merchant solutions, iso, payment gateway, merchant acquirer- show less
+Semantic Company Description: Sells point-of-sale (POS) hardware, credit card terminals, or merchant processing services specifically to local retail stores, restaurants, and main street businesses.- show less
+Exclude Description Keywords: wealth management, financial planning, investment advisor, retirement, mutual fund, hedge fund, forex, crypto, blockchain, bitcoin, trading, stock, equity, mortgage, loan officer, personal finance, insurance, life insurance- show less
+Merchant Services ICP
