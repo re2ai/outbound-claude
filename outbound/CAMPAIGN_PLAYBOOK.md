@@ -214,7 +214,7 @@ This is the most important phase. Bad copy wastes every contact on the list.
 
 **Hard rules:**
 - Under 65 words total
-- NO links (makes email HTML, destroys deliverability)
+- **ZERO links in Email 1. No exceptions.** No `<a href>`, no plain-text URLs, nothing that triggers HTML rendering. `<br>` for line breaks is the only permitted HTML tag — anything beyond that destroys deliverability.
 - NO em dashes
 - Plain text style — reads like a human typed it quickly
 - ONE specific vertical mentioned (not "local businesses" — say "restaurants", "retailers", "contractors")
@@ -222,7 +222,7 @@ This is the most important phase. Bad copy wastes every contact on the list.
 - CTAs ranked best to worst:
   - ✅ "Should I send you one?" (winner)
   - ✅ "Want me to send over the results?"
-  - ❌ "Want the link?" (sounds phishing-adjacent)
+  - ❌ "Want the link?" (sounds phishing-adjacent — and signals there's a link coming, which there isn't)
   - ❌ "Are you the best person to reach out to?" (worst tested — 0.254% positive)
 
 **Subject line format:** `"[service type] x local [specific vertical]"`
@@ -308,7 +308,11 @@ Model: `o4-mini` via `POST /v1/responses` with `tools: [{"type": "web_search"}]`
 **Never use gpt-4 family — always check latest model docs before picking a model.**
 Output stored in `web_detail` field. generate_emails.py uses it as opener if present, falls back to decision tree question if empty.
 
-### Email 2 — Follow-up (has link, day +3)
+### Email 2 — Follow-up (link permitted, day +3)
+
+Links are permissible in Email 2 and 3, but treat them as a deliberate choice — not a default. Ask: does this specific sequence benefit from a CTA link, or does it read better without one? A plain-text follow-up can outperform a linked one for certain ICPs. Only include a link if it adds clear value.
+
+
 
 Template (mail-merge, no LLM needed):
 ```
@@ -320,7 +324,7 @@ You can access all the local business data for {city}.<br><br>
 This is for a free account to try it yourself. Would love your feedback.
 ```
 
-### Email 3 — Last touch (has link, day +7)
+### Email 3 — Last touch (link permitted, day +7)
 
 Template:
 ```
