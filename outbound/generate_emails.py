@@ -2,6 +2,10 @@
 """
 Generate Email1/Subject1/Email2/Email3 custom fields for verified contacts.
 
+UNIVERSAL RULE: Email1 is ALWAYS plain text with \\n line breaks. No HTML, no links.
+Convert \\n\\n to <br><br> and \\n to <br> ONLY at SmartLead load time.
+Emails 2 and 3 ARE HTML (they contain <a href> signup links). Store with <br> tags.
+
 Two modes depending on segment:
 
 WEB-ENRICH MODE (it_msp, catering, cleaning, signage):
@@ -146,6 +150,9 @@ def build_email1_web_enrich(contact, cfg):
     """
     Web-enrich mode Email1.
 
+    IMPORTANT: Email1 is ALWAYS plain text with \\n line breaks.
+    No HTML tags, no links. Convert to <br> ONLY at SmartLead load time.
+
     Hi {{firstName}},
 
     What types of [smb_type] do you do [service] for? Mainly [smb_guess]?
@@ -167,10 +174,10 @@ def build_email1_web_enrich(contact, cfg):
     greeting = f"Hi {first_name}," if first_name else "Hi,"
 
     return (
-        f"{greeting}<br><br>"
-        f"{opening}<br><br>"
+        f"{greeting}\n\n"
+        f"{opening}\n\n"
         f"We have about 1,000 {smb_type} in {city} that could be a match. "
-        f"We built an app that uses AI to find {label} companies leads and use AI to email them.<br><br>"
+        f"We built an app that uses AI to find {label} companies leads and use AI to email them.\n\n"
         f"Do you want me to set up a free account for {company} and send you the login to test?"
     )
 
@@ -178,6 +185,9 @@ def build_email1_web_enrich(contact, cfg):
 def build_email1_decision_tree(contact, cfg, opening_question):
     """
     Decision-tree mode Email1.
+
+    IMPORTANT: Email1 is ALWAYS plain text with \\n line breaks.
+    No HTML tags, no links. Convert to <br> ONLY at SmartLead load time.
 
     {{firstName}},
 
@@ -195,10 +205,10 @@ def build_email1_decision_tree(contact, cfg, opening_question):
     greeting = first_name if first_name else "Hi"
 
     return (
-        f"{greeting},<br><br>"
-        f"{opening_question}<br><br>"
-        f"{pitch}<br><br>"
-        f"Free accounts this month.<br><br>"
+        f"{greeting},\n\n"
+        f"{opening_question}\n\n"
+        f"{pitch}\n\n"
+        f"Free accounts this month.\n\n"
         f"Should I send you one?"
     )
 

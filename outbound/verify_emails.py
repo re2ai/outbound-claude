@@ -40,7 +40,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BV_KEY   = os.getenv("BillionVerify_API_KEY")
+BV_KEY   = os.getenv("BillionVerify_API_KEY") or os.getenv("BILLIONVERIFY_API_KEY")
 BV_BASE  = "https://api.billionverify.com/v1"
 BV_HDR   = {"BV-API-KEY": BV_KEY, "Content-Type": "application/json"}
 BATCH_SIZE = 50  # BillionVerify bulk endpoint max

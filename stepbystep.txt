@@ -1,0 +1,576 @@
+## Human-in-the-Loop Campaign Builder — Step by Step
+
+This is the guided approach. The AI proposes, the human confirms at every checkpoint.
+BigQuery is the shared workspace — every intermediate result lands there so the human
+can inspect it in the BQ console before we proceed.
+
+---
+
+### BigQuery Organization
+
+  Project:  tenant-recruitin-1575995920662
+  Dataset:  PLG_OUTBOUND
+
+  Permanent tables (shared across all campaigns):
+    PLG_CONTACTS               — master contact table, deduped by apollo_id/email
+    PLG_CAMPAIGN_ENROLLMENTS   — append-only SmartLead enrollment log
+
+  Per-campaign pipeline tables (one per campaign build):
+    Naming convention: {segment}_{date}_{variant}
+    Examples:
+      local_marketing_20260317_v2
+      insurance_20260401_blunt
+      it_msp_20260415_web_enrich
+
+    These are the working tables for the step-by-step flow. Each holds one row per contact
+    for that specific campaign build, with columns filled progressively as we move through
+    the steps. The human opens BQ console at any point and sees exactly where things stand.
+
+    IMPORTANT: One campaign = one table. NEVER create a second table for the same campaign.
+    The sample pull and the full pull go into the SAME table. The sample rows stay there
+    as the full pull gets appended. Don't create thousands of tables — one per campaign
+    build is fine. The table name should be clear enough that anyone browsing the dataset
+    knows what it is.
+
+  Also used for dedup checks (Airbyte-synced HubSpot data):
+    airbyte_prod.hubspot_contacts          — all HubSpot contacts with email, lifecycle stage
+    airbyte_prod.hubspot_form_submissions  — PLG landing page signups
+
+---
+
+### Per-Campaign Table Schema
+
+Every per-campaign pipeline table uses this CONSISTENT schema. Never deviate.
+
+  -- Core contact data (ALL fields from Apollo enrichment — include everything they give us)
+  apollo_id               STRING      -- Apollo person ID
+  first_name              STRING
+  last_name               STRING
+  email                   STRING
+  email_status            STRING      -- Apollo's email status: verified, guessed, etc.
+  title                   STRING
+  headline                STRING      -- LinkedIn headline (great for eye test)
+  seniority               STRING      -- c_suite, vp, director, manager, etc.
+  departments             STRING      -- JSON array: ["c_suite", "marketing"], etc.
+  city                    STRING
+  state                   STRING
+  country                 STRING
+  linkedin_url            STRING
+  photo_url               STRING      -- Profile photo URL
+  twitter_url             STRING
+  facebook_url            STRING
+
+  -- Company data (ALL fields from Apollo organization object)
+  company_name            STRING
+  company_domain          STRING      -- primary_domain from Apollo
+  company_website         STRING      -- full website URL
+  company_linkedin_url    STRING
+  company_phone           STRING
+  company_city            STRING      -- company HQ city (may differ from person city)
+  company_state           STRING
+  company_country         STRING
+  company_address         STRING      -- full raw address
+  company_industry        STRING      -- e.g. "marketing & advertising"
+  company_keywords        STRING      -- Apollo keywords (comma-separated, very useful for ICP check)
+  company_short_description STRING    -- company About/bio (great for eye test)
+  company_num_employees   INT64       -- estimated employee count
+  company_annual_revenue  FLOAT64     -- estimated annual revenue
+  company_founded_year    INT64
+  company_facebook_url    STRING
+  company_twitter_url     STRING
+  company_sic_codes       STRING      -- JSON array of SIC codes
+  company_naics_codes     STRING      -- JSON array of NAICS codes
+  company_technologies    STRING      -- tech stack (comma-separated)
+
+  -- Campaign metadata
+  segment                 STRING      -- e.g. "local_marketing", "insurance", "it_msp"
+  apollo_keyword          STRING      -- keyword used to find this contact
+  campaign_name           STRING      -- target campaign name (set in Step 1)
+
+  -- Pipeline stage tracking
+  stage                   STRING      -- discovery | sample_pulled | enriched | verified |
+                                      --   web_enriched | copy_done | enrolled |
+                                      --   removed_verification | removed_overlap | excluded
+  discovered_at           TIMESTAMP
+  enriched_at             TIMESTAMP
+  created_at              TIMESTAMP   -- row creation time
+
+  -- Overlap / dedup annotations (CRITICAL — filled in Step 2c and Step 6b)
+  --
+  -- These checks run against SmartLead (via PLG_CAMPAIGN_ENROLLMENTS), HubSpot
+  -- (via airbyte_prod.hubspot_contacts), and our own PLG_CONTACTS table.
+  --
+  -- For each contact we check BOTH the individual email AND the company domain.
+  -- The detail columns are human-readable strings explaining what we found.
+  -- Example: sl_individual_detail = "PLG - Web Design (web_design, enrolled 2025-12-11)"
+  -- Example: hs_domain_detail = "3 contacts at acme.com, stages: marketingqualifiedlead, customer"
+  --
+  -- Implementation: bulk SQL queries against BQ tables, cross-referenced by email and
+  -- REGEXP_EXTRACT(email, r'@(.+)') for domain matching. For SmartLead we query
+  -- PLG_CAMPAIGN_ENROLLMENTS. For HubSpot we query airbyte_prod.hubspot_contacts.
+  -- See Step 2c for exact query patterns.
+  --
+  sl_individual_match     BOOL        -- this exact email was in SmartLead
+  sl_individual_detail    STRING      -- campaign name, date, outcome
+  sl_domain_match         BOOL        -- someone at this domain was in SmartLead
+  sl_domain_detail        STRING      -- how many people, which campaigns, any replies
+  hs_individual_match     BOOL        -- this exact email is in HubSpot
+  hs_individual_detail    STRING      -- lifecycle stage, lead status, deal info
+  hs_domain_match         BOOL        -- someone at this domain is in HubSpot
+  hs_domain_detail        STRING      -- number of contacts, lifecycle stages present
+  bq_previously_enriched  BOOL        -- we already have this contact in PLG_CONTACTS
+  bq_enriched_detail      STRING      -- when enriched, for which segment/keyword
+
+  -- Verification (filled in Step 3 / Step 6d)
+  email_verified          BOOL
+  verification_status     STRING      -- valid | catchall | removed
+
+  -- Web enrichment (filled in Step 4 / Step 6f, if applicable)
+  web_enrichment          STRING      -- JSON blob or summary of web search findings
+
+  -- Copy (filled in Step 5 / Step 6g)
+  subject1                STRING
+  email1                  STRING      -- PLAIN TEXT body with \n line breaks (NO HTML, NO links -- universal rule)
+  email2                  STRING      -- HTML body with <br> tags (contains signup link)
+  email3                  STRING      -- HTML body with <br> tags (contains signup link)
+
+  -- SmartLead tracking (filled in Step 7)
+  smartlead_campaign_id   INT64       -- filled after enrollment
+  enrolled_at             TIMESTAMP
+
+---
+
+### Overlap Check — Standard Query Patterns
+
+These queries MUST be used consistently every time. The overlap columns in the pipeline
+table should always be populated the same way regardless of segment.
+
+  -- SmartLead individual match (by email)
+  SELECT email, smartlead_campaign_name, segment, enrolled_at
+  FROM `PLG_OUTBOUND.PLG_CAMPAIGN_ENROLLMENTS`
+  WHERE email IN ({email_list})
+
+  -- SmartLead domain match
+  SELECT REGEXP_EXTRACT(email, r'@(.+)') as domain,
+         COUNT(*) as cnt,
+         STRING_AGG(DISTINCT smartlead_campaign_name, ', ') as campaigns
+  FROM `PLG_OUTBOUND.PLG_CAMPAIGN_ENROLLMENTS`
+  WHERE email IS NOT NULL
+  GROUP BY domain
+  HAVING domain IN ({domain_list})
+
+  -- HubSpot individual match (by email)
+  SELECT properties_email, properties_lifecyclestage, properties_hs_lead_status
+  FROM `airbyte_prod.hubspot_contacts`
+  WHERE LOWER(properties_email) IN ({lowercase_email_list})
+
+  -- HubSpot domain match
+  SELECT domain, cnt, stages FROM (
+    SELECT REGEXP_EXTRACT(properties_email, r'@(.+)') as domain,
+           COUNT(*) as cnt,
+           STRING_AGG(DISTINCT CAST(properties_lifecyclestage AS STRING), ', ') as stages
+    FROM `airbyte_prod.hubspot_contacts`
+    WHERE properties_email IS NOT NULL
+    GROUP BY domain
+  ) WHERE domain IN ({domain_list})
+
+  -- PLG_CONTACTS previously enriched (by email)
+  SELECT email, segment, apollo_keyword, enriched_at
+  FROM `PLG_OUTBOUND.PLG_CONTACTS`
+  WHERE email IN ({email_list})
+
+---
+
+### STEP 1 — Strategy Alignment (no API calls yet)
+
+Before touching any API, the AI presents a strategy brief for human approval:
+
+  a) TARGET
+     - Segment name + full ICP description (pulled from ICP_DEFINITIONS.md, not just the industry name)
+     - Who qualifies, who doesn't, and why
+     - Exclusion list (captive brands, wrong sub-segments, etc.)
+     - Pull live SmartLead stats for any prior campaigns in this segment:
+       positive reply rate, total sent, best-performing copy angle
+       (use smartlead_pull.py get_plg_campaign_breakdown)
+     - Check BigQuery PLG_CONTACTS for how many contacts we've already pulled for this segment
+     - Check PLG_CAMPAIGN_ENROLLMENTS for how many have already been emailed
+
+  b) SOURCE
+     - Recommend data source: Apollo (default, cheapest), Clay, scraping, or manual list
+     - For Apollo: confirm API key is active, check credit balance
+     - Note any source-specific limitations (Apollo rate limits: 50 req/min, 200/hr, 600/24hr)
+
+  c) SEARCH STRATEGY — Company-First vs People-First (IMPORTANT DECISION)
+
+     Choose the right search approach BEFORE pulling any data:
+
+     COMPANY-FIRST (recommended for most segments):
+       Use when: the ICP is defined by what the COMPANY does, not by the person's profile.
+       How: Apollo organizations/search with q_organization_keyword_tags → then find people
+            at those companies with title/role filters via mixed_people/api_search using
+            q_organization_keyword_tags.
+       Why: Company keyword tags in Apollo are far richer than person-level data.
+            Example: "local seo" as company keyword → 14,276 companies / 9,207 people.
+                     "local seo" as person keyword search → 59 people.
+       Best for: local marketing, IT/MSP, janitorial, insurance, signage, catering, etc.
+                 Basically any segment where "what does this company sell and to whom" matters
+                 more than "what does this individual's LinkedIn say."
+
+     PEOPLE-FIRST:
+       Use when: the ICP is defined by the person's specific role/title and the company type
+            is broad enough that company keyword filtering isn't the bottleneck.
+       How: Apollo mixed_people/api_search with q_keywords + person_titles.
+       Best for: segments where the title IS the signal (e.g., "commercial insurance agent"
+                 is a very specific role).
+
+     To decide: run a quick free count both ways and compare:
+       - organizations/search with keyword tags → total_entries in pagination
+       - mixed_people/api_search with same keyword as q_keywords → count results
+       Pick whichever gives a larger, higher-quality pool.
+
+     For company-first, the flow is:
+       1. organizations/search with q_organization_keyword_tags to find companies
+       2. Review company list for quality (keywords, description, industry, size)
+       3. mixed_people/api_search with q_organization_keyword_tags + person_titles
+          to find the right people at those companies (free discovery)
+       4. Enrich the people (1 credit each, returns full person + org data)
+
+  d) SIZE
+     - Run the actual Apollo search (free) to get exact counts — don't estimate
+     - For company-first: GET /v1/organizations/search → pagination.total_entries
+     - Then: POST /v1/mixed_people/api_search with same org keyword tags + title filters → page through for exact people count
+     - Subtract already-contacted (from BigQuery dedup query)
+     - Propose today's target list size (e.g., "1,000 net-new contacts")
+     - Note credit cost (Apollo Basic: ~$0.024/contact for enrichment)
+     - If TAM is much larger than today's target, note the remaining pool for future
+       campaigns (e.g., "9,207 total, pulling 1,000 today, 8,207 remaining for later")
+
+  e) MESSAGING
+     - Propose the email template approach:
+       Option A: Use a proven template from a prior campaign (show the copy + its reply rate)
+       Option B: Human provides new copy direction
+       Option C: AI proposes new angle based on segment research / what's worked in other segments
+     - Specify the structure: Subject1, Email1 (LLM-personalized opener + template body),
+       Email2 (mail-merge, day +3), Email3 (mail-merge, day +7)
+     - Confirm hard rules: Email 1 is ALWAYS plain text (no HTML, no links -- universal rule for ALL campaigns).
+       Under 65 words, no em dashes. Emails 2 and 3 CAN be HTML (they have signup links).
+
+  e) DATA NEEDED FOR MESSAGING
+     - What fields do we need from the source? (name, company, title, city, state, domain — standard Apollo)
+     - Do we need live web LLM enrichment? (e.g., find their specialty, recent projects, niche focus)
+       If yes: which model (gpt-5.1 or later with built-in web search via OpenAI Responses API),
+       what search query template, what output field(s)
+     - Map out every column that will appear in the final lead record
+
+>>> CHECKPOINT: Human reviews strategy brief and confirms or adjusts before any API calls.
+
+---
+
+### STEP 2 — Sample List Pull + Overlap Check (20-50 contacts)
+
+Goal: get a small sample into BigQuery with full overlap visibility so the human can
+eyeball quality AND see who we've already touched before committing credits.
+
+  a) FREE DISCOVERY
+     - Run Apollo POST /v1/mixed_people/api_search with the agreed filters
+     - Pull first 1-3 pages (up to 300 candidates) — this is FREE, no credits
+     - Note the total_entries from the response (this is our raw TAM number)
+     - Apply post-filters: exclude captive brands, wrong titles, disqualifying keywords
+
+  b) SAMPLE ENRICHMENT
+     - Pick 20-50 of the best-looking candidates (first page, filtered)
+     - Enrich via Apollo POST /v1/people/match (1 credit each) — returns ALL person + org fields
+     - Capture EVERY field Apollo returns (see schema above) — don't leave data on the table
+     - This costs 20-50 credits (~$1.20 max on Basic plan)
+
+  c) OVERLAP CHECK — SmartLead + HubSpot + BigQuery (CRITICAL)
+
+     This is NOT a simple "remove dupes" step. We check every contact AND their company
+     domain across all systems and ANNOTATE results so the human can decide what to do.
+     Don't auto-remove — surface the data and let the human choose.
+
+     For each enriched contact, check by INDIVIDUAL (email) and by COMPANY (domain):
+
+     CHECK 1 — SmartLead history (via PLG_CAMPAIGN_ENROLLMENTS in BigQuery):
+       - Has this exact email ever been enrolled in ANY SmartLead campaign?
+         → If yes: which campaign(s), when, what was the outcome?
+       - Has anyone at this company domain been enrolled?
+         → If yes: how many people, which campaigns, any replies?
+
+     CHECK 2 — HubSpot (via airbyte_prod.hubspot_contacts in BigQuery):
+       - Does this exact email exist in HubSpot?
+         → If yes: what lifecycle stage? Lead status? Associated deal?
+       - Does anyone at this company domain exist in HubSpot?
+         → If yes: how many contacts, what stages?
+
+     CHECK 3 — BigQuery PLG_CONTACTS (our own master table):
+       - Has this email been enriched before? (saves credits on full pull)
+       - Has this domain been pulled before?
+
+     Use the standard query patterns documented above. Annotate every contact with the
+     sl_*, hs_*, and bq_* columns so results are consistent across campaigns.
+
+  d) UPLOAD TO BIGQUERY
+     - Create per-campaign table: PLG_OUTBOUND.{segment}_{date}_{variant}
+     - Write sample with ALL Apollo fields + overlap annotations
+     - Tell user: "20 sample contacts in PLG_OUTBOUND.{table_name} — go check in BQ console"
+     - Include summary: "5 have SmartLead history, 2 are in HubSpot, 3 were previously enriched"
+
+  e) AI SELF-CHECK
+     - AI reviews the sample against ICP_DEFINITIONS.md
+     - Uses company_short_description, company_keywords, company_industry, employee count,
+       headline, and title to assess fit
+     - Flags any contacts that look like bad fits
+     - Reports total available TAM and estimated clean contacts after dedup
+
+>>> CHECKPOINT: Human reviews sample in BigQuery — both the contact quality AND the overlap data.
+    Key columns to scan: company_name, company_short_description, company_keywords,
+    company_num_employees, title, headline, city/state, and all sl_*/hs_* overlap columns.
+    Decides: which overlap scenarios to include/exclude for this campaign.
+    Confirms: list quality is good, targeting is accurate, TAM is large enough to proceed.
+    If not — adjust filters, keywords, or segment and re-pull.
+
+---
+
+### STEP 3 — Email Verification on Sample
+
+  a) Run BillionVerify on the sample contacts that passed Step 2 review
+     - Check BillionVerify credits first: python verify_emails.py --credits
+     - python verify_emails.py --file /tmp/sample.json --out /tmp/sample_verified.json
+     - 1 credit per email checked
+
+  b) UPDATE pipeline table in BigQuery
+     - Set email_verified = true/false, verification_status = valid/catchall/removed
+     - Mark undeliverable contacts (stage = "removed_verification")
+
+  c) Report to human:
+     - "Of 20 sample contacts: 15 valid, 3 catch-all, 2 undeliverable"
+     - This gives an expected yield rate for the full pull
+     - Note: catch-all emails can optionally be included (riskier but more volume)
+
+>>> CHECKPOINT: Human confirms verification yield is acceptable.
+    If yield is too low (<50%), may need different keywords or source.
+
+---
+
+### STEP 4 — Web Enrichment on Sample (if needed per Step 1e)
+
+Only if the strategy calls for live web data (e.g., finding their specialty, recent projects).
+Skip this step if the segment doesn't benefit from web enrichment.
+
+  a) Run web enrichment on verified sample contacts
+     - Use OpenAI Responses API with web_search tool (or latest model with built-in search)
+     - For each contact: search "[company_name] [city] [segment-specific query]"
+     - Extract the agreed-upon fields (e.g., service_specialty, smb_types_served, recent_project)
+
+  b) UPDATE pipeline table in BigQuery
+     - Fill in web_enrichment column (and any specific extracted fields)
+     - Note hit rate: "Found specific web data for 12/15 contacts (80% hit rate)"
+
+  c) AI SELF-CHECK
+     - Review enrichment quality: are the extracted details accurate and useful for copy?
+     - Flag any hallucinated or low-confidence results
+
+>>> CHECKPOINT: Human reviews enriched sample in BigQuery.
+    Confirms: web data is accurate, useful for personalization, hit rate is acceptable.
+
+---
+
+### STEP 5 — Copy Generation on Sample
+
+  a) Generate Subject1 + Email1 for the sample contacts
+     - Use the agreed template + LLM for the personalized opener only
+     - Model: gpt-5-mini (or whatever's current) via generate_emails.py
+     - Email1: LLM writes ONE opening line (question or observation), rest is template
+     - Subject1: LLM generates per the "[service] x local [vertical]" format
+     - Hard rules enforced: Email1 is PLAIN TEXT (no HTML, no links -- universal rule). Under 65 words, no em dashes.
+     - Email2 + Email3: pure mail-merge from template (no LLM tokens unless human said otherwise)
+     - Email2/3 ARE HTML (contain <a href> signup links). Store with <br> tags directly.
+
+  b) UPDATE pipeline table in BigQuery
+     - Fill in subject1, email1, email2, email3 columns for each sample contact
+     - Tell user: "Copy generated for 15 sample contacts — review in BQ console"
+
+  c) AI SELF-CHECK
+     - Verify every Email1: no links, no em dashes, no "I noticed", under 65 words
+     - Verify subject lines follow format
+     - Verify Email2/3 have correct UTM links and mail-merge fields
+     - Flag any issues
+
+>>> CHECKPOINT: Human reviews copy in BigQuery.
+    Reads through the sample emails. Confirms tone, personalization quality, template structure.
+    Gives feedback: "adjust the CTA", "opener is too generic", "love it, proceed", etc.
+    If feedback given — AI adjusts prompt/template and regenerates sample for another review.
+
+---
+
+### STEP 6 — Full List Pull + Overlap Check + Enrichment
+
+Once sample is approved across all dimensions (list quality, verification yield, enrichment,
+copy quality), we scale up to the full target list.
+
+  a) FULL DISCOVERY PULL
+     - Page through all Apollo results for the keyword(s)
+     - Apply same post-filters as sample
+     - Save all candidate IDs
+
+  b) FULL OVERLAP CHECK (same as Step 2c but at scale — BEFORE spending enrichment credits)
+
+     Run the exact same SmartLead + HubSpot + BigQuery checks on the entire candidate list.
+     Use the same standard query patterns for consistency.
+
+     KEY CREDIT-SAVING STEP: Before enriching, check if we already have contact data
+     in PLG_CONTACTS from a prior pull. If so, reuse that data — don't spend another
+     Apollo credit to get the same name/email/company we already have.
+
+     Upload annotated candidate list to pipeline table (stage = "discovery")
+     Report: "X,XXX candidates found. Y already in SmartLead, Z in HubSpot, W previously enriched.
+              Net new to enrich: N contacts (N credits needed)."
+
+  >>> CHECKPOINT: Human reviews overlap report.
+      Confirms which overlap categories to include/exclude.
+      Approves credit spend for enrichment.
+
+  c) FULL ENRICHMENT (batched, resume-safe)
+     - Enrich only the approved net-new contacts via Apollo POST /v1/people/match (1 credit each)
+     - Capture ALL Apollo fields (see schema above)
+     - For contacts already in PLG_CONTACTS, pull their existing data instead (0 credits)
+     - Save incrementally to avoid losing work
+     - Update pipeline table as they come in (stage = "enriched")
+
+  d) FULL EMAIL VERIFICATION via BillionVerify (MANDATORY before SmartLead load)
+     - Check BillionVerify credits: python verify_emails.py --credits
+     - Run: python verify_emails.py --file /tmp/full_enriched.json --out /tmp/full_verified.json
+     - 1 credit per email, checks SMTP deliverability
+     - Results: valid (send), catch-all (risky), removed (never send)
+     - Update pipeline table with verification_status for every contact
+     - Report yield: "X,XXX enriched → Y,YYY verified valid, Z catch-all, W removed"
+
+  e) POST-VERIFICATION OVERLAP RE-CHECK (optional but recommended)
+
+     After verification, we have final email addresses. Quick re-check because:
+     - Apollo may return a different email than expected
+     - Last chance to catch overlap before copy generation
+
+     Quick query: check all verified emails against SmartLead + HubSpot one more time.
+     Flag any new overlaps not caught in step (b).
+
+  f) FULL WEB ENRICHMENT (if applicable)
+     - Run web enrichment on all verified contacts
+     - Update pipeline table
+     - Report hit rate
+
+  g) FULL COPY GENERATION
+     - Generate Subject1 + Email1 (LLM) + Email2 + Email3 (mail-merge) for all contacts
+     - Use same prompts/templates approved in Step 5
+     - Update pipeline table with all copy columns filled
+     - AI runs same quality checks as sample: Email1 is plain text (no HTML, no links), word count, no banned patterns
+     - Email1 stored as plain text with \n. Convert to <br> ONLY at SmartLead load time.
+     - Email2/3 stored as HTML with <br> tags (they contain signup links).
+
+  h) SYNC TO MASTER TABLE
+     - Upsert all contacts to PLG_CONTACTS (the permanent master table)
+     - This ensures dedup works for future campaigns
+
+>>> CHECKPOINT: Human does a final review in BigQuery.
+    Can filter/sort pipeline table to spot-check copy, verify data quality at scale.
+    Can review overlap annotations one last time.
+    Confirms: "ready to load into SmartLead" or flags issues.
+
+---
+
+### STEP 7 — SmartLead Campaign Setup + Launch
+
+  a) CREATE CAMPAIGN
+     - Name: "PLG - [Segment] - [Variant] - Claude"
+     - Apply all required settings in ONE call:
+       send_as_plain_text: true, enable_ai_esp_matching: true,
+       track_settings: [DONT_TRACK_EMAIL_OPEN, DONT_TRACK_LINK_CLICK],
+       stop_lead_settings: REPLY_TO_AN_EMAIL, follow_up_percentage: 50
+
+  b) LOAD SEQUENCES
+     - 3 sequences: day 0 ({{Subject1}}/{{Email1}}), day +3 ({{Email2}}), day +7 ({{Email3}})
+     - Day spacing: 0, +3, +4 (so Email3 lands day 7 total)
+     - Trailing <div><br></div> after Email1 for signature spacing
+     - No %signature% in body (auto-appends)
+
+  c) INBOX SELECTION
+     - Audit all available inboxes:
+       SMTP/IMAP OK, warmup ACTIVE, reputation >=95%, age >=14d, no blocked_reason
+     - Confirm NONE are in CRE campaigns (absolute no-touch)
+     - Check actual sends/day < 30 across all campaigns each inbox is in
+     - Assign 10+ healthy inboxes
+     - Verify signatures are set correctly on each
+
+  d) SET SCHEDULE
+     - Mon-Fri, 8am-6pm ET
+     - max_new_leads_per_day based on inbox count x 20
+     - min_time_btw_emails: 10
+
+  e) LOAD LEADS
+     - Export from pipeline table (stage = "copy_done", verification_status = "valid")
+     - Format each lead with: email, first_name, last_name, company_name, location,
+       custom_fields: {Subject1, Email1, Email2, Email3}
+     - Load via SmartLead POST /campaigns/{id}/leads
+     - Line breaks must be <br>/<br><br> in stored copy (not \n)
+     - Batch in groups if list is large
+
+  f) PRE-LAUNCH QA (11-point checklist from CAMPAIGN_PLAYBOOK.md)
+     - Campaign name contains "PLG"
+     - Settings: send_as_plain_text=True, enable_ai_esp_matching=True
+     - Settings: track_settings = [DONT_EMAIL_OPEN, DONT_LINK_CLICK]
+     - Settings: follow_up_percentage=50, stop_lead_settings=REPLY_TO_AN_EMAIL
+     - Schedule: Mon-Fri, 8am-6pm ET, max_new_leads_per_day set
+     - 3 sequences loaded with correct delays (day 0, +3, +7)
+     - Sequences use {{Subject1}}, {{Email1}}, {{Email2}}, {{Email3}}
+     - Inboxes: all healthy, not blocked, warmup ACTIVE, rep >=95%, age >=14d
+     - Inboxes: actual sends/day < 30 before assignment
+     - Inboxes: none are in any CRE campaign
+     - Leads loaded with all 4 custom fields populated (spot-check 5 via API)
+     - Email1 bodies are PLAIN TEXT (no HTML, no links -- universal rule for all campaigns)
+     - Email2/3 bodies are HTML with <br> tags and signup links
+     - Sample Email1 reviewed -- no em dashes, no "I noticed", no AI-sounding openers
+     - Signatures set on all inboxes
+
+  g) RECORD ENROLLMENTS
+     - Sync to PLG_CAMPAIGN_ENROLLMENTS in BigQuery
+     - Update pipeline table stage = "enrolled"
+
+>>> CHECKPOINT: Human reviews QA checklist results.
+    Confirms: "launch it" or "fix [issue] first"
+
+  h) LAUNCH
+     - POST /campaigns/{id}/status {"status": "START"}
+     - Notify via Slack webhook (if configured)
+     - Log in SEARCH_LOG.md: campaign ID, lead count, inboxes, capacity
+
+---
+
+### STEP 8 — Monitoring + Feeding
+
+After launch, ongoing:
+
+  a) DAILY
+     - Check inbox health (any new blocked_reason → remove immediately)
+     - All expected campaigns still ACTIVE
+     - 7-day positive reply rate via smartlead_pull.py
+
+  b) WEEKLY
+     - Pull full stats: sent, replied, positive, bounce rate
+     - Check HubSpot/BigQuery for trial signups attributed to campaign:
+       SELECT COUNT(*), REGEXP_EXTRACT(pageUrl, r'utm_campaign=([^&]+)')
+       FROM airbyte_prod.hubspot_form_submissions
+       WHERE pageUrl LIKE '%/resquared-trial-redirect%'
+       AND TIMESTAMP_MILLIS(submittedAt) >= TIMESTAMP('{7_days_ago}')
+       GROUP BY 2
+     - Report to human with recommendation: continue, adjust copy, pause, or kill
+
+  c) FEEDING MORE LEADS
+     - When campaign has <50 leads in queue and reply rate is positive (>=0.5%)
+     - Go back to remaining enriched pool (or pull more from Apollo)
+     - Run through Steps 2-6 for the new batch (including overlap checks)
+     - Load into existing campaign
+
+  d) KILL CRITERIA
+     - 200+ sends with 0 positive replies → pause and reassess
+     - Inbox bounce rate >5% → remove those inboxes, investigate

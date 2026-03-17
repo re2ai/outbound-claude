@@ -1,4 +1,40 @@
-# Resquared Outbound — Master Context
+# Resquared Outbound -- Master Context
+
+---
+
+## HOW TO START A SESSION (Read This First)
+
+When a user opens this repo with Claude Code, they may not know the system. Offer two paths:
+
+**Path 1: Step-by-Step (Recommended)**
+- Human-in-the-loop. Claude proposes, human confirms at every checkpoint.
+- Follow `stepbystep.txt` for the full workflow.
+- Best for anyone -- no prior knowledge of the system needed.
+- Every intermediate result goes to a BigQuery table for human review before proceeding.
+
+**Path 2: Autopilot**
+- For experienced operators who know the pipeline.
+- Follow `CAMPAIGN_PLAYBOOK.md` end-to-end with minimal checkpoints.
+- Still pause before spending Apollo credits and before launching SmartLead campaigns.
+
+Ask the user which path they prefer, or suggest step-by-step if they seem new.
+If the user just says "run a campaign" or gives a segment name, default to step-by-step
+and walk them through it.
+
+---
+
+## UNIVERSAL EMAIL RULES (Read This Before Any Campaign Work)
+
+**Email 1 is ALWAYS plain text. No HTML. No links. No exceptions. PLG and non-PLG alike.**
+
+- Email 1 body is stored as plain text with `\n` line breaks. Zero HTML tags in stored copy.
+- At SmartLead load time ONLY, convert `\n\n` to `<br><br>` and `\n` to `<br>`.
+- NEVER put `<a href>`, `<img>`, `<b>`, `<div>`, or any HTML in Email 1. This has ruined campaigns.
+- ZERO links of any kind in Email 1. No URLs, no signup links, no tracking links. Nothing.
+
+**Emails 2 and 3 CAN be HTML** because they contain `<a href>` signup links. Store these with `<br>` tags directly.
+
+This rule is absolute and applies to every campaign, every segment, every variant.
 
 ---
 

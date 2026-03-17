@@ -50,6 +50,9 @@ AND `reply_time` is not null. SmartLead pre-classifies all leads even without re
 
 **All PLG campaigns MUST have "PLG" in the name. All campaigns WITHOUT "PLG" = CRE. No exceptions.**
 
+**One campaign = one BigQuery table. The sample pull and the full pull go into the SAME table.
+Never create a second table for the same campaign — append to the existing one.**
+
 ---
 
 ## PHASE 1 — Build the Apollo List
@@ -203,7 +206,15 @@ python verify_emails.py --file ... --out ... --include-catchall
 This is the most important phase. Bad copy wastes every contact on the list.
 **Get approval on copy direction and samples BEFORE generating for the full list.**
 
-### Email 1 — The first touch (plain text, no links)
+### Email 1 — The first touch (PLAIN TEXT, no links, no HTML)
+
+**UNIVERSAL RULE — Email 1 is ALWAYS plain text. No exceptions. PLG and non-PLG alike.**
+
+Email 1 must be stored as plain text with `\n` line breaks. When loading into SmartLead,
+convert `\n\n` to `<br><br>` and `\n` to `<br>` ONLY at load time — the stored copy itself
+must contain zero HTML tags. SmartLead's `send_as_plain_text: true` setting handles rendering,
+but if the stored body contains `<a href>`, `<img>`, or any HTML beyond `<br>` line breaks,
+it will trigger HTML rendering in some email clients and destroy deliverability.
 
 **Structure (in order):**
 1. One qualifying question OR personalized opening (see LLM guidance below)
@@ -213,7 +224,9 @@ This is the most important phase. Bad copy wastes every contact on the list.
 
 **Hard rules:**
 - Under 65 words total
-- **ZERO links in Email 1. No exceptions.** No `<a href>`, no plain-text URLs, nothing that triggers HTML rendering. `<br>` for line breaks is the only permitted HTML tag — anything beyond that destroys deliverability.
+- **ZERO links in Email 1. No exceptions. No `<a href>`, no plain-text URLs, no trackable links, nothing.**
+- **ZERO HTML in Email 1. No `<b>`, `<i>`, `<img>`, `<div>`, nothing. Plain text only.**
+- `<br>` tags are inserted ONLY at SmartLead load time (converting from `\n`). Never in stored copy.
 - NO em dashes
 - Plain text style — reads like a human typed it quickly
 - ONE specific vertical mentioned (not "local businesses" — say "restaurants", "retailers", "contractors")
@@ -271,8 +284,10 @@ Decision tree:
 
 **After LLM output — always:**
 - Verify no em dashes, no "I noticed", no compliments
-- Spot-check 10–20 samples before generating full list
-- Convert `\n\n` → `<br><br>` and `\n` → `<br>` before storing in SmartLead custom fields
+- Verify Email 1 is pure plain text — no HTML tags, no links of any kind
+- Spot-check 10-20 samples before generating full list
+- Email 1 stored as plain text with `\n` line breaks. Convert to `<br>` ONLY at SmartLead load time.
+- Emails 2 and 3 are HTML (they contain `<a href>` signup links) — store with `<br>` tags directly.
 
 **Models:** Use `gpt-5-mini` (ID: `gpt-5-mini-2025-08-07`) for bulk generation.
 Use `ThreadPoolExecutor(max_workers=8)` for parallel API calls.
@@ -307,7 +322,10 @@ Model: `o4-mini` via `POST /v1/responses` with `tools: [{"type": "web_search"}]`
 **Never use gpt-4 family — always check latest model docs before picking a model.**
 Output stored in `web_detail` field. generate_emails.py uses it as opener if present, falls back to decision tree question if empty.
 
-### Email 2 — Follow-up (link permitted, day +3)
+### Email 2 — Follow-up (HTML permitted, links OK, day +3)
+
+Emails 2 and 3 CAN be HTML because they contain `<a href>` signup links. Store these with
+`<br>` tags directly (not `\n`). This is the opposite of Email 1 which must be pure plain text.
 
 Links are permissible in Email 2 and 3, but treat them as a deliberate choice — not a default. Ask: does this specific sequence benefit from a CTA link, or does it read better without one? A plain-text follow-up can outperform a linked one for certain ICPs. Only include a link if it adds clear value.
 
@@ -338,9 +356,13 @@ You can access all the local business data for {city}.<br><br>
 ### Custom fields for SmartLead leads
 All PLG campaigns use 4 custom fields per lead:
 - `Subject1` — the email subject (personalized per lead)
-- `Email1` — full Email 1 body (HTML with `<br><br>` line breaks)
-- `Email2` — full Email 2 body (mail-merge, pre-rendered per lead)
-- `Email3` — full Email 3 body (mail-merge, pre-rendered per lead)
+- `Email1` — full Email 1 body (**plain text stored with `\n`, converted to `<br>` at load time**)
+- `Email2` — full Email 2 body (HTML with `<br>` line breaks, contains signup link)
+- `Email3` — full Email 3 body (HTML with `<br>` line breaks, contains signup link)
+
+**CRITICAL:** Email1 must NEVER contain `<a href>`, `<img>`, or any HTML besides `<br>` (added at load time).
+This is a universal rule for ALL campaigns (PLG and non-PLG). HTML in Email 1 triggers rendering
+issues and spam filters, destroying deliverability. This has ruined campaigns before.
 
 ---
 
@@ -482,10 +504,12 @@ Body:
   }
 }
 ```
-⚠️ NEVER use `{{companyName}}` or other camelCase native SmartLead vars — they don't map reliably.
+⚠️ NEVER use `{{companyName}}` or other camelCase native SmartLead vars -- they don't map reliably.
 ⚠️ Native vars that DO work: `{{firstName}}`, `{{lastName}}`, `{{email}}`, `{{location}}`
-⚠️ All `<br><br>` must already be in the stored Email1/2/3 — `\n\n` collapses in HTML rendering.
-⚠️ No lead update endpoint exists. If custom fields are wrong → stop campaign, delete, recreate.
+⚠️ **Email1 line break conversion at load time:** stored as plain text with `\n`. At load time,
+   convert `\n\n` -> `<br><br>` and remaining `\n` -> `<br>`. Email1 must NEVER contain links or HTML tags.
+⚠️ Email2/Email3 are stored with `<br>` tags already (they contain HTML links). Load as-is.
+⚠️ No lead update endpoint exists. If custom fields are wrong -> stop campaign, delete, recreate.
 
 ---
 
@@ -505,7 +529,9 @@ Run every check before `status: START`.
 □ Inboxes: actual sends/day confirmed <30 before assignment
 □ Inboxes: none are in any CRE campaign
 □ Leads loaded with all 4 custom fields populated (spot-check 5 leads via GET /campaigns/{id}/leads)
-□ Sample Email1 bodies reviewed — no em dashes, no "I noticed", no AI-sounding openers
+□ Sample Email1 bodies reviewed -- no em dashes, no "I noticed", no AI-sounding openers
+□ Email1 bodies are PLAIN TEXT with zero links and zero HTML (only <br> added at load time)
+□ Email2/Email3 bodies are HTML with <br> tags and signup links
 □ Signatures set on all inboxes
 □ Warmup ON on all inboxes (POST /email-accounts/{id}/warmup {"warmup_enabled": true})
 ```
