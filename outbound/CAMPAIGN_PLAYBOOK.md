@@ -528,14 +528,26 @@ If a subject is set, SmartLead starts a new thread — which breaks the conversa
    If no safe inboxes available → request new inbox provisioning. Do NOT steal from active campaigns.
 
 ### Step 6F — Verify signatures on assigned inboxes
-Each inbox must have the correct signature set:
-- Griffin → `"Griffin\nCo-Founder, Resquared (re2.ai)"`
-- Others → `"{FirstName}\nResquared (re2.ai)"`
+**Only apply signatures to inboxes that don't already have one.** Run with `--only-missing` flag:
 
 ```
-POST /email-accounts/{id}
-Body: {"signature": "..."}
+python smartlead_update_signatures.py -k $SMARTLEAD_API_KEY --only-missing
 ```
+
+Signature format: `Full Name<br>Job Title @ Resquared (re2.ai)`
+
+| First name | Title |
+|---|---|
+| Griffin | CEO & Founder |
+| Tyler | Co-founder |
+| Jalen | Operations Specialist |
+| Leonardo | Manager |
+| Paul | Operations Specialist |
+| Harold | Outbound Specialist |
+| Erik | Operations Specialist |
+
+To add a new person: add their `"firstname": "Title"` entry to `NAME_TO_JOB_TITLE` in `smartlead_update_signatures.py`.
+
 Signature auto-appends to every send. Never add signature variable to sequence body.
 
 ### Step 6G — Load leads
