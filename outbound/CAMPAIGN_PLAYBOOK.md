@@ -329,6 +329,12 @@ Emails 2 and 3 CAN be HTML because they contain `<a href>` signup links. Store t
 
 Links are permissible in Email 2 and 3, but treat them as a deliberate choice — not a default. Ask: does this specific sequence benefit from a CTA link, or does it read better without one? A plain-text follow-up can outperform a linked one for certain ICPs. Only include a link if it adds clear value.
 
+**City resolution rule (always apply in this order):**
+```
+city = COALESCE(NULLIF(TRIM(city),''), NULLIF(TRIM(company_city),''), 'your area')
+```
+Never leave `{city}` blank — if both `city` and `company_city` are missing, fall back to `"your area"`.
+
 Template (mail-merge, no LLM needed):
 ```
 I ran a quick search in {city} myself this morning.
@@ -581,7 +587,11 @@ Body:
 ⚠️ **Email1 line break conversion at load time:** stored as plain text with `\n`. At load time,
    convert `\n\n` -> `<br><br>` and remaining `\n` -> `<br>`. Email1 must NEVER contain links or HTML tags.
 ⚠️ Email2/Email3 are stored with `<br>` tags already (they contain HTML links). Load as-is.
-⚠️ No lead update endpoint exists. If custom fields are wrong -> stop campaign, delete, recreate.
+⚠️ **Lead update endpoint:** `POST /campaigns/{id}/leads/{lead_id}` with `{"email": "...", "custom_fields": {...}}`.
+   Use this to fix custom fields after load (e.g. blank city). Update sequentially with 0.3s delay + retry on 429.
+⚠️ **Test leads:** When testing the update endpoint or verifying lead structure, always use a single
+   known test lead (e.g. by filtering on a specific email). Never run a bulk update on the full campaign
+   just to test — fix the script on one lead first, then apply to the rest.
 
 ---
 
