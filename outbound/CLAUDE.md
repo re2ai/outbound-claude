@@ -2,6 +2,31 @@
 
 ---
 
+## NOTE FOR GRIFFIN — PLAYBOOK UPDATES (2026-03-20)
+
+Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during the Local Marketing campaign launch. Key things that changed:
+
+1. **Sequence subjects:** Email 2 and Email 3 subjects must be **empty** (not "follow up" / "last note") so SmartLead threads them as replies. If set, it starts a new thread.
+2. **Sequence timing:** Now Day 0 → +3 → +5 (total 8 days). Previously was +3/+4.
+3. **Settings:** Add `"force_plain_text": true` to the settings call alongside `send_as_plain_text`.
+4. **Min time between emails:** 30 minutes (was 10).
+5. **Inbox selection — 4 rules (BQ is source of truth, not the API):**
+   - Account created > 14 days ago
+   - Warmup started > 14 days ago
+   - Warmup status = ACTIVE (INACTIVE = skip)
+   - 0 active campaigns per BQ join (API `campaign_count` is unreliable)
+   - Run `build_all_smartlead_accounts.py` before every inbox selection run
+6. **Daily send sizing — three rules together:**
+   - Rule A: daily = 1/5 to 1/4 of total leads
+   - Rule B: daily = 1/2 to 3/4 of inbox capacity
+   - Rule C: days-to-complete should leave ≤2 days overlap with the Email 1→2 gap
+   - Pick the closest round number that wins on balance. See playbook Step 6E for worked example.
+7. **AI categorization:** Must be done in the **old SmartLead UI** (new UI caps at 5 categories). API doesn't support this.
+
+Full details in `CAMPAIGN_PLAYBOOK.md` Step 6B–6E and the QA checklist.
+
+---
+
 ## HOW TO START A SESSION (Read This First)
 
 When a user opens this repo with Claude Code, they may not know the system. Offer two paths:

@@ -383,6 +383,7 @@ POST /campaigns/{id}/settings
 Body:
 {
   "send_as_plain_text": true,          ← REQUIRED. Plain text = better deliverability
+  "force_plain_text": true,            ← REQUIRED. Forces plain text as content type (failsafe guard)
   "enable_ai_esp_matching": true,      ← REQUIRED. 15-20% deliverability improvement
   "track_settings": ["DONT_TRACK_EMAIL_OPEN", "DONT_TRACK_LINK_CLICK"],  ← REQUIRED. Open tracking injects pixel = spam filter risk
   "stop_lead_settings": "REPLY_TO_AN_EMAIL",  ← Stop sequence when lead replies
@@ -393,6 +394,7 @@ Body:
 ⚠️ `track_settings` values: POST as `DONT_TRACK_EMAIL_OPEN` / `DONT_TRACK_LINK_CLICK`
    (API stores internally as `DONT_EMAIL_OPEN` / `DONT_LINK_CLICK` — both work for reads)
 ⚠️ Do NOT use `track_settings` in isolation — always include `send_as_plain_text: true` in same call.
+⚠️ `force_plain_text` accepted by API (returns 200) but not visible in GET /campaigns/{id} response — it applies internally.
 
 ### Step 6C — Set schedule
 ```
@@ -403,8 +405,9 @@ Body:
   "days_of_the_week": [1, 2, 3, 4, 5],   ← Mon-Fri only
   "start_hour": "08:00",
   "end_hour": "18:00",
-  "min_time_btw_emails": 10,
-  "max_new_leads_per_day": N              ← Set to full inbox capacity (inboxes × 20)
+  "min_time_btw_emails": 30,
+  "max_new_leads_per_day": N              ← See sizing formula below
+
 }
 ```
 
@@ -421,17 +424,24 @@ Body: {"sequences": [
   {
     "seq_number": 2,
     "seq_delay_details": {"delay_in_days": 3},
-    "subject": "follow up",
+    "subject": "",
     "email_body": "<div>{{Email2}}</div>"
   },
   {
     "seq_number": 3,
-    "seq_delay_details": {"delay_in_days": 4},
-    "subject": "last note",
+    "seq_delay_details": {"delay_in_days": 5},
+    "subject": "",
     "email_body": "<div>{{Email3}}</div>"
   }
 ]}
 ```
+**Sequence timing:** Day 0 → Day 3 → Day 8 (total 8-day sequence).
+- +3 days for Email 2: standard lower-bound, matches "you had time to see it" window.
+- +5 days for Email 3: industry best practice is 5-7 days for the final touch (avoids appearing pushy).
+- Avoid sequences under 7 days total — compresses into spam-trigger territory.
+
+**Empty subjects on Email 2 & 3:** Leave subject empty so SmartLead sends them as replies in the same thread.
+If a subject is set, SmartLead starts a new thread — which breaks the conversation context and looks robotic.
 ⚠️ Sequence body: trailing `<div><br></div>` after Email1 adds spacing before auto-appended signature.
 ⚠️ NO `%signature%` in body — it renders as literal text via API. Signature auto-appends.
 ⚠️ To UPDATE existing sequences: include the `"id"` field from `GET /campaigns/{id}/sequences`.
@@ -441,30 +451,79 @@ Body: {"sequences": [
 
 **MANDATORY audit before assigning any inbox:**
 
-1. Run health check on all candidate inboxes:
-   - `is_smtp_success: true`
-   - `is_imap_success: true`
-   - `warmup_details.blocked_reason: null`
-   - `warmup_details.status: "ACTIVE"`
-   - `warmup_details.warmup_reputation`: ≥80%
-   - `warmup_details.warmup_created_at`: ≥14 days ago (Erik's rule)
+1. **Use BigQuery as source of truth** — always rebuild before inbox selection:
+   ```bash
+   python build_all_smartlead_accounts.py  # in scorecard/re2scorecard2026/
+   ```
+   The SmartLead API's `campaign_count` field is unreliable. Use `ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS`
+   to get true campaign membership counts. An inbox showing `campaign_count: 0` via API may still
+   be assigned to campaigns per BQ.
 
-2. For each healthy candidate, check actual sends/day (7-day avg):
-   - Pull `GET /campaigns/{id}/statistics` with 7-day date range for EVERY campaign the inbox is in
-   - Sum sends/day across all campaigns
-   - **Hard rule: DO NOT assign if total actual sends/day ≥ 30** (will steal from other campaigns)
+2. **Ready inbox criteria** (ALL 4 must be true):
+   1. **Account created > 14 days ago:** `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(created_at), DAY) > 14`
+   2. **Warmup started > 14 days ago:** `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(warmup_created_at), DAY) > 14`
+      - If `warmup_created_at` is null, fall back to `created_at`
+   3. **No active campaigns:** `COUNTIF(campaign_status = 'ACTIVE') = 0` per BQ join
+      - Inboxes in only COMPLETED/PAUSED campaigns are fine — treat as available
+   4. **Warmup status is ACTIVE:** `warmup_status = 'ACTIVE'`
+      - INACTIVE warmup = do not use, regardless of age or reputation
 
-3. Hard blocks:
-   - ANY inbox in a CRE campaign = absolute no-touch
+   Additional health checks (exclude if failing):
+   - `is_smtp_success: true` and `is_imap_success: true`
+   - `blocked_reason: null`
+   - `warmup_reputation ≥ 80%`
+
+   **Canonical BQ query:**
+   ```sql
+   SELECT
+     a.account_id, a.from_email, a.message_per_day, a.warmup_reputation,
+     TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(a.created_at), DAY) as account_age_days,
+     TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(a.warmup_created_at), DAY) as warmup_age_days,
+     COUNTIF(ca.campaign_status = 'ACTIVE') as active_campaigns
+   FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.ALL_SMARTLEAD_ACCOUNTS` a
+   LEFT JOIN `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS` ca
+     ON a.account_id = ca.account_id
+   WHERE a.warmup_status = 'ACTIVE'
+   GROUP BY 1,2,3,4,5,6
+   HAVING active_campaigns = 0 AND account_age_days > 14 AND warmup_age_days > 14
+   ORDER BY warmup_age_days DESC, warmup_reputation DESC
+   ```
+
+3. **Hard blocks:**
+   - ANY inbox in a CRE campaign = absolute no-touch (check `UPPER(campaign_name) NOT LIKE '%PLG%'`)
    - ANY inbox with `blocked_reason` set = dead, remove from all campaigns
 
-4. Assign:
+4. **Assign:**
    ```
    POST /campaigns/{id}/email-accounts
    Body: {"email_account_ids": [id1, id2, ...]}
    ```
 
-5. Target: 10+ inboxes per campaign for meaningful volume.
+5. **Inbox count + daily rate sizing — three rules, pick the closest round number that wins on balance:**
+
+   - **Rule A (leads-based):** `total_leads/5  ≤  daily  ≤  total_leads/4`
+   - **Rule B (capacity-based):** `inbox_capacity/2  ≤  daily  ≤  inbox_capacity * 3/4`
+     where `inbox_capacity = sum of message_per_day across all assigned inboxes`
+   - **Rule C (timing-based):** days to first-email all leads (`total_leads / daily`) should leave minimal overlap with the follow-up delay (Email 1→2 gap). Aim for overlap ≤ 2 days.
+     - `days_to_complete = total_leads / daily`
+     - `overlap = days_to_complete - email2_delay_days`
+     - Prefer overlap < 2 days; never exceed 3 days
+
+   **How to pick:**
+   1. Compute Rule A and Rule B ranges. Find the intersection.
+   2. If no intersection, try adding more inboxes to shift Rule B up, or accept the closest boundary value.
+   3. Apply Rule C as the tiebreaker between candidates — prefer the higher daily value if it meaningfully reduces overlap.
+   4. Round to the nearest clean number (50s or 100s). Use the round number that wins on balance across all three rules.
+
+   **Example — 1,366 leads, 20 inboxes, 355/day capacity, Email 1→2 delay = 3 days:**
+   - Rule A: 273–341/day
+   - Rule B (355 capacity): 178–266/day → no full overlap with Rule A
+   - Candidates: 250 (Rule B ✓, Rule A ✗) vs 300 (Rule A ✓, Rule B slightly over)
+   - Rule C at 250: 1,366/250 = 5.5 days → 2.5 days overlap ✗
+   - Rule C at 300: 1,366/300 = 4.6 days → 1.6 days overlap ✓
+   - **Decision: 300/day** — satisfies Rule A, Rule C; minor Rule B breach acceptable
+
+   Target: 10+ inboxes per campaign for meaningful volume.
    If no safe inboxes available → request new inbox provisioning. Do NOT steal from active campaigns.
 
 ### Step 6F — Verify signatures on assigned inboxes
@@ -519,15 +578,17 @@ Run every check before `status: START`.
 
 ```
 □ Campaign name contains "PLG"
-□ Settings: send_as_plain_text=True, enable_ai_esp_matching=True
+□ Settings: send_as_plain_text=True, force_plain_text=True, enable_ai_esp_matching=True
 □ Settings: track_settings = ["DONT_EMAIL_OPEN", "DONT_LINK_CLICK"]
 □ Settings: follow_up_percentage=50, stop_lead_settings=REPLY_TO_AN_EMAIL
 □ Schedule: Mon-Fri, 8am-6pm ET, max_new_leads_per_day set
-□ 3 sequences loaded with correct delays (day 0, +3, +7)
-□ Sequences use {{Subject1}}, {{Email1}}, {{Email2}}, {{Email3}}
-□ Inboxes: all healthy (smtp/imap ok, warmup ACTIVE, rep ≥80%, not blocked, age ≥14d)
-□ Inboxes: actual sends/day confirmed <30 before assignment
-□ Inboxes: none are in any CRE campaign
+□ 3 sequences loaded with correct delays (day 0, +3, +8 total)
+□ Sequences: Email1 subject = {{Subject1}}, Email2 subject = empty, Email3 subject = empty
+□ Sequences use {{Email1}}, {{Email2}}, {{Email3}} in body
+□ BQ tables rebuilt before inbox selection (build_all_smartlead_accounts.py)
+□ Inboxes: all 4 rules pass — account >14d, warmup >14d, warmup ACTIVE, 0 active campaigns (per BQ)
+□ Inboxes: none are in any CRE campaign (verified via BQ campaign_name check)
+□ AI categorization: enabled manually in SmartLead OLD interface (not the new UI — new UI limits to 5 categories only; old interface allows all categories) → AI & Automation tab → SmartLead AI → enable all categories ← API not available
 □ Leads loaded with all 4 custom fields populated (spot-check 5 leads via GET /campaigns/{id}/leads)
 □ Sample Email1 bodies reviewed -- no em dashes, no "I noticed", no AI-sounding openers
 □ Email1 bodies are PLAIN TEXT with zero links and zero HTML (only <br> added at load time)
