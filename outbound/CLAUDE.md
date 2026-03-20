@@ -22,6 +22,8 @@ Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during th
    - Rule C: days-to-complete should leave ≤2 days overlap with the Email 1→2 gap
    - Pick the closest round number that wins on balance. See playbook Step 6E for worked example.
 7. **AI categorization:** Must be done in the **old SmartLead UI** (new UI caps at 5 categories). API doesn't support this.
+8. **Schedule window:** 9:00–19:00 New York time (was 8:00–18:00).
+9. **UTM format updated:** `utm_source=email&utm_medium=smartlead&utm_campaign={slug}&utm_content=email2` (or `email3`) `&email={url_encoded_email}`. Previously used `utm_medium=link&utm_campaign=claude-v1` — do not use that format going forward.
 
 Full details in `CAMPAIGN_PLAYBOOK.md` Step 6B–6E and the QA checklist.
 

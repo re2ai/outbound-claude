@@ -329,29 +329,30 @@ Emails 2 and 3 CAN be HTML because they contain `<a href>` signup links. Store t
 
 Links are permissible in Email 2 and 3, but treat them as a deliberate choice — not a default. Ask: does this specific sequence benefit from a CTA link, or does it read better without one? A plain-text follow-up can outperform a linked one for certain ICPs. Only include a link if it adds clear value.
 
-
-
 Template (mail-merge, no LLM needed):
 ```
 I ran a quick search in {city} myself this morning.
 I made a target list of 200 businesses and their contact email that I think would be
 interested in your services before the end of Q1.<br><br>
 You can access all the local business data for {city}.<br><br>
-<a href="https://landing.re2.ai/resquared-trial-redirect?utm_source=email&utm_medium=link&utm_campaign=claude-v1&email={url_encoded_email}">Access {city} Lead Data</a><br><br>
+<a href="https://landing.re2.ai/resquared-trial-redirect?utm_source=email&utm_medium=smartlead&utm_campaign={campaign_name_slug}&utm_content=email2&email={url_encoded_email}">Access {city} Lead Data</a><br><br>
 This is for a free account to try it yourself. Would love your feedback.
 ```
 
-### Email 3 — Last touch (link permitted, day +7)
+### Email 3 — Last touch (link permitted, day +8)
 
 Template:
 ```
 Since I'm guessing you're busy, I'll just leave this here so you can check the data
 whenever you have a moment.<br><br>
 You can access all the local business data for {city}.<br><br>
-<a href="https://landing.re2.ai/resquared-trial-redirect?utm_source=email&utm_medium=link&utm_campaign=claude-v1&email={url_encoded_email}">Access {city} Lead Data</a>
+<a href="https://landing.re2.ai/resquared-trial-redirect?utm_source=email&utm_medium=smartlead&utm_campaign={campaign_name_slug}&utm_content=email3&email={url_encoded_email}">Access {city} Lead Data</a>
 ```
 
-**UTM tag:** Always `claude-v1`. Consistent tracking = clean attribution in HubSpot.
+**UTM format:** `utm_source=email&utm_medium=smartlead&utm_campaign={campaign_name_slug}&utm_content=email2` (or `email3`) `&email={url_encoded_email}`
+- `campaign_name_slug`: lowercase, hyphens, e.g. `PLG - Local Marketing - Claude` → `plg-local-marketing-claude`
+- `utm_content`: `email2` for Email 2, `email3` for Email 3
+- `email`: URL-encoded lead email for HubSpot attribution
 
 ### Custom fields for SmartLead leads
 All PLG campaigns use 4 custom fields per lead:
@@ -403,8 +404,8 @@ Body:
 {
   "timezone": "America/New_York",
   "days_of_the_week": [1, 2, 3, 4, 5],   ← Mon-Fri only
-  "start_hour": "08:00",
-  "end_hour": "18:00",
+  "start_hour": "09:00",
+  "end_hour": "19:00",
   "min_time_btw_emails": 30,
   "max_new_leads_per_day": N              ← See sizing formula below
 
@@ -581,7 +582,7 @@ Run every check before `status: START`.
 □ Settings: send_as_plain_text=True, force_plain_text=True, enable_ai_esp_matching=True
 □ Settings: track_settings = ["DONT_EMAIL_OPEN", "DONT_LINK_CLICK"]
 □ Settings: follow_up_percentage=50, stop_lead_settings=REPLY_TO_AN_EMAIL
-□ Schedule: Mon-Fri, 8am-6pm ET, max_new_leads_per_day set
+□ Schedule: Mon-Fri, 9am-7pm ET, max_new_leads_per_day set (see 3-rule sizing formula)
 □ 3 sequences loaded with correct delays (day 0, +3, +8 total)
 □ Sequences: Email1 subject = {{Subject1}}, Email2 subject = empty, Email3 subject = empty
 □ Sequences use {{Email1}}, {{Email2}}, {{Email3}} in body
