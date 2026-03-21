@@ -24,8 +24,15 @@ Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during th
 7. **AI categorization:** Must be done in the **old SmartLead UI** (new UI caps at 5 categories). API doesn't support this.
 8. **Schedule window:** 9:00–19:00 New York time (was 8:00–18:00).
 9. **UTM format updated:** `utm_source=email&utm_medium=smartlead&utm_campaign={slug}&utm_content=email2` (or `email3`) `&email={url_encoded_email}`. Previously used `utm_medium=link&utm_campaign=claude-v1` — do not use that format going forward.
+10. **City + business count must be baked in at lead load time (Step 6G):**
+    - City: `COALESCE(city, company_city, 'your area')` — never leave blank
+    - Business count: query `business_sources.us_companies_list__30m_us_business_std` per city, apply `friendly_count()` rounding → `"over X"` or `"almost X"`. Fallback: `"thousands of businesses"`.
+    - Do NOT hardcode a number (e.g. "200 businesses") — always use real data.
+    - Full logic + code in `CAMPAIGN_PLAYBOOK.md` Step 6G.
+11. **Signatures — only apply if missing:** Run `smartlead_update_signatures.py --only-missing` during campaign launch. Only force-update all when titles change. Title map is in the script itself.
+12. **Lead update endpoint exists:** `POST /campaigns/{id}/leads/{lead_id}` with `{"email": "...", "custom_fields": {...}}`. Sequential with 0.3s delay + retry on 429. Always test on one lead first before bulk-updating.
 
-Full details in `CAMPAIGN_PLAYBOOK.md` Step 6B–6E and the QA checklist.
+Full details in `CAMPAIGN_PLAYBOOK.md` Step 6B–6G and the QA checklist.
 
 ---
 
