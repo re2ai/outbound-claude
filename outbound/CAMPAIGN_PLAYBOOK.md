@@ -567,7 +567,58 @@ To add a new person: add their `"firstname": "Title"` entry to `NAME_TO_JOB_TITL
 
 Signature auto-appends to every send. Never add signature variable to sequence body.
 
-### Step 6G — Load leads
+### Step 6G — Build custom fields before loading leads
+
+Before uploading leads to SmartLead, pre-render all custom fields in Python/BQ. Follow these rules in order:
+
+**1. Resolve city:**
+```python
+city = (lead.get("city") or "").strip() or (lead.get("company_city") or "").strip() or "your area"
+```
+
+**2. Get business count from BQ and display as friendly number:**
+```python
+# Query once per unique city, not per lead
+sql = """
+    SELECT city, COUNT(*) as cnt
+    FROM `tenant-recruitin-1575995920662.business_sources.us_companies_list__30m_us_business_std`
+    WHERE city IN UNNEST(@cities)
+    GROUP BY city
+"""
+# Then apply rounding:
+BREAKPOINTS = [50,100,150,200,250,300,400,500,750,1000,1500,2000,2500,3000,
+               5000,7500,10000,15000,20000,25000,30000,50000,75000,100000,
+               150000,200000,250000,300000,500000]
+
+def friendly_count(n):
+    if not n or n <= 0: return None
+    floor_bp = max((b for b in BREAKPOINTS if b <= n), default=None)
+    ceil_bp  = min((b for b in BREAKPOINTS if b > n),  default=None)
+    if floor_bp is None: return None
+    if ceil_bp and n / ceil_bp >= 0.97:
+        return f"almost {ceil_bp:,}"
+    return f"over {floor_bp:,}"
+
+count_str = friendly_count(city_counts.get(city))  # e.g. "over 30,000" or "almost 1,000"
+businesses = f"{count_str} businesses" if count_str else "thousands of businesses"
+```
+
+**3. Build Email2 / Email3 with real city + count baked in:**
+```python
+encoded_email = urllib.parse.quote(lead["email"])
+email2 = (
+    f"I ran a quick search in {city} myself this morning. "
+    f"I made a target list of {businesses} and their contact email "
+    f"that I think would be interested in your services before the end of Q1.<br><br>"
+    f"You can access all the local business data for {city}.<br><br>"
+    f'<a href="https://landing.re2.ai/resquared-trial-redirect?utm_source=email'
+    f'&utm_medium=smartlead&utm_campaign={{campaign_slug}}&utm_content=email2'
+    f'&email={encoded_email}">Access {city} Lead Data</a><br><br>'
+    f"This is for a free account to try it yourself. Would love your feedback."
+)
+```
+
+**Then load to SmartLead:**
 ```
 POST /campaigns/{id}/leads
 Body:
@@ -582,8 +633,8 @@ Body:
       "custom_fields": {
         "Subject1": "insurance x local restaurants",
         "Email1": "John<br><br>Opening question here.<br><br>Pitch + CTA.",
-        "Email2": "...pre-rendered email 2 body...",
-        "Email3": "...pre-rendered email 3 body..."
+        "Email2": "...pre-rendered email 2 body with real city + count...",
+        "Email3": "...pre-rendered email 3 body with real city + count..."
       }
     }
   ],
