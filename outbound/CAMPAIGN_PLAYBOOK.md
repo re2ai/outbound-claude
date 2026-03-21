@@ -335,6 +335,17 @@ city = COALESCE(NULLIF(TRIM(city),''), NULLIF(TRIM(company_city),''), 'your area
 ```
 Never leave `{city}` blank — if both `city` and `company_city` are missing, fall back to `"your area"`.
 
+**Business count rule — use real data, display as friendly rounded number:**
+- Query `business_sources.us_companies_list__30m_us_business_std` for `COUNT(*) WHERE city = '{city}'`
+- Round using this logic (never show raw count):
+  - Find the largest "nice" breakpoint ≤ count → `floor_bp`
+  - Find the smallest "nice" breakpoint > count → `ceil_bp`
+  - If `count / ceil_bp >= 0.97` → display as `"almost {ceil_bp:,}"`
+  - Otherwise → display as `"over {floor_bp:,}"`
+- Nice breakpoints: 50, 100, 150, 200, 250, 300, 400, 500, 750, 1,000, 1,500, 2,000, 2,500, 3,000, 5,000, 7,500, 10,000, 15,000, 20,000, 25,000, 30,000, 50,000, 75,000, 100,000, 150,000, 200,000+
+- Examples: 290 → "over 250" | 982 → "almost 1,000" | 30,231 → "over 30,000"
+- If city has no match in BQ → fall back to `"thousands of businesses"`
+
 Template (mail-merge, no LLM needed):
 ```
 I ran a quick search in {city} myself this morning.
