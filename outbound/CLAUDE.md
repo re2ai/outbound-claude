@@ -57,6 +57,18 @@ and walk them through it.
 
 ---
 
+## CAMPAIGN ACCESS RULES (Absolute)
+
+**NEVER touch a campaign that does not have "PLG" in the name. No exceptions.**
+
+- Non-PLG campaigns (CRE, Business Brokers, SLG, etc.) are managed by other teams.
+- You may READ stats from any campaign for analysis/reporting.
+- You may NOTIFY the user if a non-PLG campaign has issues (blocked inboxes, high bounce rate).
+- You may NOT stop, pause, start, modify settings, add/remove inboxes, or load leads on non-PLG campaigns.
+- If a non-PLG campaign needs action, tell the user and let them handle it with their team.
+
+---
+
 ## UNIVERSAL EMAIL RULES (Read This Before Any Campaign Work)
 
 **Email 1 is ALWAYS plain text. No HTML. No links. No exceptions. PLG and non-PLG alike.**

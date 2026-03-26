@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-MODEL = "gpt-5"
+MODEL = "gpt-5.4"
 MAX_WORKERS = 5
 
 SEGMENT_CONFIG = {
