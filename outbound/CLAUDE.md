@@ -6,7 +6,7 @@
 
 Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during the Local Marketing campaign launch. Key things that changed:
 
-1. **Sequence subjects:** Email 2 and Email 3 subjects must be **empty** (not "follow up" / "last note") so SmartLead threads them as replies. If set, it starts a new thread.
+1. **Sequence subjects:** Email 2 subject must be **empty** so SmartLead threads it as a reply to Email 1. Email 3 must have its own subject (`{{Subject3}}` — a new trigger/angle) so it starts a fresh thread. This is intentional for Email 3.
 2. **Sequence timing:** Now Day 0 → +3 → +5 (total 8 days). Previously was +3/+4.
 3. **Settings:** Add `"force_plain_text": true` to the settings call alongside `send_as_plain_text`.
 4. **Min time between emails:** 30 minutes (was 10).
@@ -57,28 +57,30 @@ and walk them through it.
 
 ---
 
-## CAMPAIGN ACCESS RULES (Absolute)
+## CAMPAIGN ACCESS RULES
 
-**NEVER touch a campaign that does not have "PLG" in the name. No exceptions.**
+Claude can create and manage **PLG, CRE, and BB** campaigns. Rules:
 
-- Non-PLG campaigns (CRE, Business Brokers, SLG, etc.) are managed by other teams.
-- You may READ stats from any campaign for analysis/reporting.
-- You may NOTIFY the user if a non-PLG campaign has issues (blocked inboxes, high bounce rate).
-- You may NOT stop, pause, start, modify settings, add/remove inboxes, or load leads on non-PLG campaigns.
-- If a non-PLG campaign needs action, tell the user and let them handle it with their team.
+1. **Before creating a CRE or BB (SLG) campaign**, always confirm with the user:
+   - "Just to confirm — you want a SLG campaign (CRE/BB), not a PLG one?" Briefly explain the difference if helpful.
+   - Encourage PLG if the ICP fits the self-serve model — only proceed with SLG on explicit confirmation.
+2. **Confirm the full campaign name** (following the taxonomy model, see below) before calling `POST /campaigns/create`.
+3. **Before stopping, pausing, or deleting any campaign**, always confirm with the user first.
+4. You may **READ stats** from any campaign at any time for analysis/reporting.
+5. You may **NOTIFY the user** if any campaign has issues (blocked inboxes, high bounce rate, etc.).
 
 ---
 
 ## UNIVERSAL EMAIL RULES (Read This Before Any Campaign Work)
 
-**Email 1 is ALWAYS plain text. No HTML. No links. No exceptions. PLG and non-PLG alike.**
+**ALL emails (1, 2, and 3) are ALWAYS plain text. No HTML. No links. No exceptions. PLG and non-PLG alike.**
 
-- Email 1 body is stored as plain text with `\n` line breaks. Zero HTML tags in stored copy.
+- All email bodies are stored as plain text with `\n` line breaks. Zero HTML tags in stored copy.
 - At SmartLead load time ONLY, convert `\n\n` to `<br><br>` and `\n` to `<br>`.
-- NEVER put `<a href>`, `<img>`, `<b>`, `<div>`, or any HTML in Email 1. This has ruined campaigns.
-- ZERO links of any kind in Email 1. No URLs, no signup links, no tracking links. Nothing.
-
-**Emails 2 and 3 CAN be HTML** because they contain `<a href>` signup links. Store these with `<br>` tags directly.
+- NEVER put `<a href>`, `<img>`, `<b>`, `<div>`, or any HTML in any email body. This has ruined campaigns.
+- ZERO links in any email. No URLs, no signup links, no tracking links. Nothing.
+- **PLG goal:** get the reader to REPLY and ask for the trial link — do NOT send the link directly.
+- **CRE/BB goal:** get the reader to REPLY and express interest or book a demo.
 
 This rule is absolute and applies to every campaign, every segment, every variant.
 
@@ -125,7 +127,65 @@ Active PLG campaigns in SmartLead:
 - Merchant Services
 - Signage
 
-**SmartLead rule:** ALL campaigns WITHOUT "PLG" in the name = CRE. No exceptions.
+**SmartLead rule:** All campaign names must follow the taxonomy model — see **CAMPAIGN NAMING TAXONOMY** section below. PLG campaigns contain "PLG" in the Strategy field; SLG campaigns (CRE, BB) contain "SLG".
+
+---
+
+## CAMPAIGN NAMING TAXONOMY (Haroldo's Model)
+
+All campaigns — PLG, CRE, BB — must follow this exact naming format:
+
+```
+{Strategy} - {ICP} - {Channel} - {Approach} - {CTA} - {Version}
+```
+
+| Component | Valid values |
+|-----------|-------------|
+| **Strategy** | `PLG`, `SLG` |
+| **ICP** | `CRE`, `Business Brokers`, `Insurance`, `IT Solutions`, `Cleaning`, `Signage`, `Catering`, `Merchant Services`, `Security`, ... |
+| **Channel** | `Email`, `LinkedIn`, `SMS` |
+| **Approach** | `HyperPersonal`, `Trigger`, `ProblemFirst`, `SocialProof`, `DataDriven`, `OneLiner` |
+| **CTA** | `Interested`, `Connect`, `Access`, `Demo` |
+| **Version** | `v1` (default), `v2`, `v3`, ... — increment for repushes or copy variants |
+
+**Examples:**
+- `PLG - IT Solutions - Email - DataDriven - Access - v1`
+- `SLG - CRE - Email - HyperPersonal - Demo - v1`
+- `SLG - Business Brokers - Email - ProblemFirst - Connect - v1`
+- `PLG - Insurance - Email - Trigger - Interested - v2`
+
+### Approach — when to suggest each
+
+| Approach | When to use | Best ICPs |
+|----------|-------------|-----------|
+| **HyperPersonal** | You have specific prospect data (listing address, company detail, recent event) | CRE, any segment with web enrichment |
+| **Trigger** | A time-based or event hook exists (new listing, business opening, lease expiry) | CRE, Signage |
+| **ProblemFirst** | ICP has a well-known pain you can name in the subject or opener | Insurance, IT Solutions, BB |
+| **SocialProof** | Resquared has specific results to cite for that ICP | Any segment with proven reply rates |
+| **DataDriven** | City/business count data is the hook ("over 500 businesses in Austin") | All PLG (BQ count available) |
+| **OneLiner** | Re-engagement, large TAM, or audience needing brevity | Any re-push or large-volume segment |
+
+### CTA — when to suggest each
+
+| CTA | Copy style | Best for |
+|-----|-----------|----------|
+| **Access** | "Just reply and I'll send you access" | PLG only — trial link sent on reply |
+| **Demo** | "Open to a quick demo?" | SLG — CRE, BB — sales conversation |
+| **Interested** | "Let me know if you're interested" | Soft ask — warming audiences or large TAM |
+| **Connect** | "Open to a quick chat?" | BB, LinkedIn-adjacent networking |
+
+**Claude's role on naming:** When starting a new campaign, propose an Approach and CTA based on the ICP, available data, and external references. Explain the reasoning briefly, then let the user confirm or adjust. Do not finalize the campaign name or call `POST /campaigns/create` until the user has approved the full name.
+
+---
+
+## BigQuery Routing
+
+| Campaign type | BQ dataset | Tables |
+|---------------|-----------|--------|
+| PLG | `PLG_OUTBOUND` | `PLG_CONTACTS`, `PLG_CAMPAIGN_ENROLLMENTS` |
+| SLG (CRE, BB) | `SLG_OUTBOUND` | `SLG_CONTACTS`, `SLG_CAMPAIGN_ENROLLMENTS` |
+
+Always sync to the correct dataset after loading leads (see Phase 8B in `CAMPAIGN_PLAYBOOK.md`).
 
 ---
 
