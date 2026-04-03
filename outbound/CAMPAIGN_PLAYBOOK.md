@@ -780,39 +780,43 @@ Body: {"sequences": [
    to get true campaign membership counts. An inbox showing `campaign_count: 0` via API may still
    be assigned to campaigns per BQ.
 
-2. **Ready inbox criteria** (ALL 4 must be true):
-   1. **Account created > 14 days ago:** `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(created_at), DAY) > 14`
-   2. **Warmup started > 14 days ago:** `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(warmup_created_at), DAY) > 14`
+2. **Ready inbox criteria** (ALL must be true):
+   1. **Warmup started > 14 days ago:** `TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(warmup_created_at), DAY) > 14`
       - If `warmup_created_at` is null, fall back to `created_at`
-   3. **No active campaigns:** `COUNTIF(campaign_status = 'ACTIVE') = 0` per BQ join
-      - Inboxes in only COMPLETED/PAUSED campaigns are fine — treat as available
-   4. **Warmup status is ACTIVE:** `warmup_status = 'ACTIVE'`
+   2. **Warmup status is ACTIVE:** `warmup_status = 'ACTIVE'`
       - INACTIVE warmup = do not use, regardless of age or reputation
+   3. **Warmup reputation > 90%** — prioritize 100% first, then fill with >90% if needed. Never use ≤ 90%.
+   4. **Active campaigns = 0** — prefer inboxes in no campaign. If more inboxes are needed, allow up to 1 active campaign; when doing so, **prioritize inboxes attached to the oldest campaigns** (they are closest to finishing).
+   5. `is_smtp_success: true` and `is_imap_success: true`
+   6. `blocked_reason: null`
 
-   Additional health checks (exclude if failing):
-   - `is_smtp_success: true` and `is_imap_success: true`
-   - `blocked_reason: null`
-   - `warmup_reputation ≥ 80%`
-
-   **Canonical BQ query:**
+   **Canonical BQ query — Tier 1 (preferred, 0 active campaigns):**
    ```sql
    SELECT
      a.account_id, a.from_email, a.message_per_day, a.warmup_reputation,
-     TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(a.created_at), DAY) as account_age_days,
      TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), TIMESTAMP(a.warmup_created_at), DAY) as warmup_age_days,
      COUNTIF(ca.campaign_status = 'ACTIVE') as active_campaigns
    FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.ALL_SMARTLEAD_ACCOUNTS` a
    LEFT JOIN `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS` ca
      ON a.account_id = ca.account_id
    WHERE a.warmup_status = 'ACTIVE'
-   GROUP BY 1,2,3,4,5,6
-   HAVING active_campaigns = 0 AND account_age_days > 14 AND warmup_age_days > 14
-   ORDER BY warmup_age_days DESC, warmup_reputation DESC
+     AND a.is_smtp_success = TRUE AND a.is_imap_success = TRUE
+     AND a.blocked_reason IS NULL
+     AND CAST(REPLACE(a.warmup_reputation, '%', '') AS FLOAT64) > 90
+   GROUP BY 1,2,3,4,5
+   HAVING active_campaigns = 0 AND warmup_age_days > 14
+   ORDER BY warmup_reputation DESC, warmup_age_days DESC
+   ```
+
+   **Tier 2 — fallback (max 1 active campaign, only if Tier 1 is insufficient):**
+   ```sql
+   -- Same query but HAVING active_campaigns = 1
+   -- Join to ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS to get the campaign's created_at
+   -- ORDER BY campaign_created_at ASC (oldest campaign first)
    ```
 
 3. **Hard blocks:**
-   - ANY inbox in a CRE campaign = absolute no-touch (check `UPPER(campaign_name) NOT LIKE '%PLG%'`)
-   - ANY inbox with `blocked_reason` set = dead, remove from all campaigns
+   - ANY inbox with `blocked_reason` set = dead, do not use
 
 4. **Assign:**
    ```

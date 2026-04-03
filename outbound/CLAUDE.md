@@ -10,41 +10,40 @@ Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during th
 2. **Sequence timing:** Now Day 0 → +3 → +5 (total 8 days). Previously was +3/+4.
 3. **Settings:** Add `"force_plain_text": true` to the settings call alongside `send_as_plain_text`.
 4. **Min time between emails:** 30 minutes (was 10).
-5. **Inbox selection — two tiers (BQ is source of truth, not the API):**
+5. **Inbox selection (BQ is source of truth, not the API):**
 
-   **Tier 1 — "Available"** (inbox is healthy and ready to send):
-   - `is_warmup_blocked = FALSE` — INACTIVE warmup_status auto-sets this to TRUE, so those are excluded
-   - `warmup_reputation = '100%'` — anything below 100% means "Need warmup", skip
-   - `is_smtp_success = TRUE` and `is_imap_success = TRUE` — must be connected
-   - `warmup_created_at >= 14 days ago` — under 14 days = "Still warming up", skip
-   - `is_blacklisted = FALSE`
+   **Eligibility criteria (ALL must be true):**
+   - `warmup_created_at >= 14 days ago` — under 14 days = still warming up, skip
+   - `warmup_status = 'ACTIVE'` — INACTIVE = do not use regardless of age or reputation
+   - `warmup_reputation > 90%` — **prioritize 100% first**, only use 91–99% if 100% pool is insufficient
+   - `is_smtp_success = TRUE` and `is_imap_success = TRUE`
+   - `blocked_reason IS NULL`
 
-   **Tier 2 — "Available for new campaigns"** (Available + not currently assigned):
-   - All Tier 1 criteria above, plus:
-   - `active_campaigns = 0` — count only ACTIVE status campaigns (not PAUSED) via BQ join; API `campaign_count` is unreliable
+   **Campaign assignment:**
+   - **Prefer** inboxes with `active_campaigns = 0`
+   - **Fallback** (only if more inboxes are needed): allow up to `active_campaigns = 1`, and **prioritize the inbox attached to the oldest campaign** (closest to finishing)
+   - API `campaign_count` is unreliable — always use BQ join on `ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS`
 
-   Run `build_all_smartlead_accounts.py` (in `scorecard/re2scorecard2026`) before every inbox selection run — this refreshes `ALL_SMARTLEAD_ACCOUNTS` and `ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS` in BQ. Never rely on a live API scan alone.
+   Run `build_all_smartlead_accounts.py` (in `scorecard/re2scorecard2026`) before every inbox selection run.
 
-   **Reference query:**
+   **Reference query (Tier 1 — 0 active campaigns):**
    ```sql
-   SELECT a.account_id, a.from_email, a.message_per_day,
-     DATE_DIFF(CURRENT_DATE(), DATE(a.warmup_created_at), DAY) AS warmup_age_days
+   SELECT a.account_id, a.from_email, a.message_per_day, a.warmup_reputation,
+     DATE_DIFF(CURRENT_DATE(), DATE(a.warmup_created_at), DAY) AS warmup_age_days,
+     COUNTIF(ca.campaign_status = 'ACTIVE') AS active_campaigns
    FROM MARKETSEGMENTDATA.ALL_SMARTLEAD_ACCOUNTS a
-   LEFT JOIN (
-     SELECT account_id, COUNT(*) AS cnt
-     FROM MARKETSEGMENTDATA.ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS
-     WHERE campaign_status = 'ACTIVE'
-     GROUP BY account_id
-   ) active ON active.account_id = a.account_id
-   WHERE a.is_blacklisted = FALSE
-     AND a.is_warmup_blocked = FALSE
-     AND a.warmup_reputation IN ('100%', '100')
-     AND a.is_smtp_success = TRUE
-     AND a.is_imap_success = TRUE
+   LEFT JOIN MARKETSEGMENTDATA.ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS ca
+     ON a.account_id = ca.account_id
+   WHERE a.warmup_status = 'ACTIVE'
+     AND a.is_smtp_success = TRUE AND a.is_imap_success = TRUE
+     AND a.blocked_reason IS NULL
+     AND CAST(REPLACE(a.warmup_reputation, '%', '') AS FLOAT64) > 90
      AND DATE_DIFF(CURRENT_DATE(), DATE(a.warmup_created_at), DAY) >= 14
-     AND COALESCE(active.cnt, 0) = 0
-   ORDER BY a.from_email
+   GROUP BY 1, 2, 3, 4, 5
+   HAVING active_campaigns = 0
+   ORDER BY warmup_reputation DESC, warmup_age_days DESC
    ```
+   *(For Tier 2 fallback: change `HAVING active_campaigns = 0` to `= 1` and order by campaign `created_at ASC`)*
 6. **Daily send sizing — three rules together:**
    - Rule A: daily = 1/5 to 1/4 of total leads
    - Rule B: daily = 1/2 to 3/4 of inbox capacity
