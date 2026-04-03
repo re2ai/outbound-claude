@@ -772,7 +772,10 @@ Body: {"sequences": [
 
 **MANDATORY audit before assigning any inbox:**
 
-1. **Use BigQuery as source of truth** — always rebuild before inbox selection:
+1. **Use BigQuery as source of truth** — rebuild BQ accounts data before inbox selection if EITHER condition is true:
+   - A campaign was launched since the last BQ refresh, OR
+   - The last BQ refresh was more than 1 day ago
+
    ```bash
    python build_all_smartlead_accounts.py  # in scorecard/re2scorecard2026/
    ```
@@ -818,13 +821,18 @@ Body: {"sequences": [
 3. **Hard blocks:**
    - ANY inbox with `blocked_reason` set = dead, do not use
 
-4. **Assign:**
+4. **Inbox diversity — apply after filtering, before finalizing the selection:**
+   - **Spread across domains:** avoid picking multiple inboxes from the same domain (e.g. 3× `@domain.com`). Prefer one inbox per domain; only use a second from the same domain if the pool is too small.
+   - **Spread across usernames:** avoid patterns that look like a bulk sender (e.g. `email1@`, `email2@`, `email3@`). Prefer inboxes with real first/last name usernames.
+   - If the eligible pool is too uniform (same domain or robotic usernames), flag it to the user before assigning — do not silently use a bad set.
+
+5. **Assign:**
    ```
    POST /campaigns/{id}/email-accounts
    Body: {"email_account_ids": [id1, id2, ...]}
    ```
 
-5. **Inbox count + daily rate sizing — three rules, pick the closest round number that wins on balance:**
+6. **Inbox count + daily rate sizing — three rules, pick the closest round number that wins on balance:**
 
    - **Rule A (leads-based):** `total_leads/5  ≤  daily  ≤  total_leads/4`
    - **Rule B (capacity-based):** `inbox_capacity/2  ≤  daily  ≤  inbox_capacity * 3/4`
@@ -850,6 +858,7 @@ Body: {"sequences": [
 
    Target: 10+ inboxes per campaign for meaningful volume.
    If no safe inboxes available → request new inbox provisioning. Do NOT steal from active campaigns.
+   After sizing, re-check diversity (rule 4): if hitting the inbox count requires reusing domains or robotic usernames, flag to user rather than silently degrading quality.
 
 ### Step 6F — Verify signatures on assigned inboxes
 **Only apply signatures to inboxes that don't already have one.** Run with `--only-missing` flag:
