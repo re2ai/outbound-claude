@@ -36,9 +36,11 @@ import time
 import argparse
 import requests
 from collections import Counter
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / "scorecard" / "re2scorecard2026" / ".env")
 
 BV_KEY   = os.getenv("BillionVerify_API_KEY") or os.getenv("BILLIONVERIFY_API_KEY")
 BV_BASE  = "https://api.billionverify.com/v1"
@@ -58,7 +60,7 @@ def verify_batch_api(emails):
     Returns dict of {email: {is_deliverable, is_catchall, status, score}}.
     """
     r = requests.post(f"{BV_BASE}/verify/bulk", headers=BV_HDR,
-                      json={"emails": emails}, timeout=60)
+                      json={"emails": emails}, timeout=120)
     r.raise_for_status()
     data = r.json()
 

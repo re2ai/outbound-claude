@@ -10,18 +10,50 @@ Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during th
 2. **Sequence timing:** Now Day 0 → +3 → +5 (total 8 days). Previously was +3/+4.
 3. **Settings:** Add `"force_plain_text": true` to the settings call alongside `send_as_plain_text`.
 4. **Min time between emails:** 30 minutes (was 10).
-5. **Inbox selection — 4 rules (BQ is source of truth, not the API):**
-   - Account created > 14 days ago
-   - Warmup started > 14 days ago
-   - Warmup status = ACTIVE (INACTIVE = skip)
-   - 0 active campaigns per BQ join (API `campaign_count` is unreliable)
-   - Run `build_all_smartlead_accounts.py` before every inbox selection run
+5. **Inbox selection — two tiers (BQ is source of truth, not the API):**
+
+   **Tier 1 — "Available"** (inbox is healthy and ready to send):
+   - `is_warmup_blocked = FALSE` — INACTIVE warmup_status auto-sets this to TRUE, so those are excluded
+   - `warmup_reputation = '100%'` — anything below 100% means "Need warmup", skip
+   - `is_smtp_success = TRUE` and `is_imap_success = TRUE` — must be connected
+   - `warmup_created_at >= 14 days ago` — under 14 days = "Still warming up", skip
+   - `is_blacklisted = FALSE`
+
+   **Tier 2 — "Available for new campaigns"** (Available + not currently assigned):
+   - All Tier 1 criteria above, plus:
+   - `active_campaigns = 0` — count only ACTIVE status campaigns (not PAUSED) via BQ join; API `campaign_count` is unreliable
+
+   Run `build_all_smartlead_accounts.py` (in `scorecard/re2scorecard2026`) before every inbox selection run — this refreshes `ALL_SMARTLEAD_ACCOUNTS` and `ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS` in BQ. Never rely on a live API scan alone.
+
+   **Reference query:**
+   ```sql
+   SELECT a.account_id, a.from_email, a.message_per_day,
+     DATE_DIFF(CURRENT_DATE(), DATE(a.warmup_created_at), DAY) AS warmup_age_days
+   FROM MARKETSEGMENTDATA.ALL_SMARTLEAD_ACCOUNTS a
+   LEFT JOIN (
+     SELECT account_id, COUNT(*) AS cnt
+     FROM MARKETSEGMENTDATA.ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS
+     WHERE campaign_status = 'ACTIVE'
+     GROUP BY account_id
+   ) active ON active.account_id = a.account_id
+   WHERE a.is_blacklisted = FALSE
+     AND a.is_warmup_blocked = FALSE
+     AND a.warmup_reputation IN ('100%', '100')
+     AND a.is_smtp_success = TRUE
+     AND a.is_imap_success = TRUE
+     AND DATE_DIFF(CURRENT_DATE(), DATE(a.warmup_created_at), DAY) >= 14
+     AND COALESCE(active.cnt, 0) = 0
+   ORDER BY a.from_email
+   ```
 6. **Daily send sizing — three rules together:**
    - Rule A: daily = 1/5 to 1/4 of total leads
    - Rule B: daily = 1/2 to 3/4 of inbox capacity
    - Rule C: days-to-complete should leave ≤2 days overlap with the Email 1→2 gap
    - Pick the closest round number that wins on balance. See playbook Step 6E for worked example.
-7. **AI categorization:** Must be done in the **old SmartLead UI** (new UI caps at 5 categories). API doesn't support this.
+7. **Manual UI steps (API cannot set these — do both before launch):**
+   - **OOO auto-restart:** Campaign settings → Lead Management → "Automatically restart ai-categorised OOO when lead returns" → ON. Without this, OOO leads sit paused forever and never get follow-ups.
+   - **AI categorization:** Must be done in the **old SmartLead UI** (new UI caps at 5 categories). Set all reply categories so SmartLead auto-tags every reply. This powers BQ reporting and positive-reply tracking.
+   - Neither setting is verifiable via API — always confirm manually in the UI.
 8. **Schedule window:** 9:00–19:00 New York time (was 8:00–18:00).
 9. **UTM format updated:** `utm_source=email&utm_medium=smartlead&utm_campaign={slug}&utm_content=email2` (or `email3`) `&email={url_encoded_email}`. Previously used `utm_medium=link&utm_campaign=claude-v1` — do not use that format going forward.
 10. **City + business count must be baked in at lead load time (Step 6G):**
@@ -31,6 +63,7 @@ Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during th
     - Full logic + code in `CAMPAIGN_PLAYBOOK.md` Step 6G.
 11. **Signatures — only apply if missing:** Run `smartlead_update_signatures.py --only-missing` during campaign launch. Only force-update all when titles change. Title map is in the script itself.
 12. **Lead update endpoint exists:** `POST /campaigns/{id}/leads/{lead_id}` with `{"email": "...", "custom_fields": {...}}`. Sequential with 0.3s delay + retry on 429. Always test on one lead first before bulk-updating.
+13. **Sequences endpoint replaces the full array — NEVER send a partial update.** `POST /campaigns/{id}/sequences` with a list that omits existing sequences will DELETE them. Always fetch current sequences first and include ALL of them (with their `id` fields) in every POST, even if you're only changing one. Omitting `id` creates a new sequence; including `id` updates existing.
 
 Full details in `CAMPAIGN_PLAYBOOK.md` Step 6B–6G and the QA checklist.
 
@@ -178,7 +211,23 @@ All campaigns — PLG, CRE, BB — must follow this exact naming format:
 
 ---
 
-## BigQuery Routing
+## BigQuery — Source of Truth
+
+**BQ is always the most trusted data source. Always prefer it over live API calls.**
+
+BQ data goes through processing the raw API does not: `is_blacklisted` flag, warmup detail enrichment and normalization, proper field typing. Live API fields like `campaign_count` are known to be unreliable and must not be used for decisions.
+
+### Inbox / Account tables (`MARKETSEGMENTDATA`)
+
+| Table | Purpose |
+|-------|---------|
+| `ALL_SMARTLEAD_ACCOUNTS` | All email accounts with warmup details, blacklist flag |
+| `ALL_SMARTLEAD_CAMPAIGN_ACCOUNTS` | Campaign–inbox assignments with campaign status |
+| `SMARTLEAD_BLACKLISTED_DOMAINS` | Domains to skip |
+
+Refresh with: `python build_all_smartlead_accounts.py` (in `scorecard/re2scorecard2026`) — run this before any inbox selection query.
+
+### Campaign enrollment tables
 
 | Campaign type | BQ dataset | Tables |
 |---------------|-----------|--------|

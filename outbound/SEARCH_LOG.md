@@ -203,3 +203,49 @@ Track every search: filters used, TAM discovered, how many enriched, how many re
 |---------|--------|
 | Merchant Services | Emails ready (/tmp/merchant_emails.json) — needs new campaign setup |
 | CRE | Sales segment — handled separately |
+
+---
+
+## HVAC — 2026-04-02
+
+### Search v1 (Apollo — CURRENT)
+**Keywords**: `HVAC` (1,051 candidates), `heating and cooling` (635 new)
+**Filters**:
+- person_titles: owner, founder, president, CEO, managing director, principal
+- organization_num_employees_ranges: 1,50
+- organization_locations: United States
+- has_email: true (free api_search flag)
+
+**TAM**: ~1,686 unique candidates (11 pages HVAC + 7 pages heating and cooling)
+**Candidates pulled (api_search, free)**: 1,686 → `~/Documents/hvac_candidates.json`
+**Post-dedup net new**: 1,686 (0 dupes — brand new segment)
+**Enriched**: not yet
+**Credits used**: 0 (free search only)
+**Status**: READY FOR ENRICHMENT
+**Next keywords to try**: `air conditioning contractor`, `HVAC maintenance`, `commercial air conditioning`
+
+### Search v2 (Clay export — CURRENT)
+**Source**: Clay table "Leadership, HVAC Manufacturing, US" — exported 2026-04-02
+**Raw rows**: 2,353
+**Filtered** (dropped: manufactur/supply/distributor/wholesale/parts/components companies;
+  dropped titles: project mgr, production mgr, account mgr, office mgr, engineer,
+  technician, recruiter, talent acquisition, marketing mgr, financial, accountant, IT mgr)
+**After filter**: 1,736 rows
+**With email (resolved across 6 providers)**: 1,259 → `~/Documents/hvac_clay_filtered.json`
+**Post-dedup net new**: 1,256 (3 dupes — 2 SmartLead, 1 HubSpot)
+**BillionVerify**: not yet run
+**Status**: READY FOR BILLIONVERIFY
+
+### Combined TAM
+| Source | Net new | Email status |
+|--------|---------|--------------|
+| Apollo | 1,686 | Needs enrichment (~1,146 expected with email at 68% yield) |
+| Clay | 1,256 | Email resolved, needs BillionVerify |
+| **Total** | **2,942** | **~2,400 expected with verified email** |
+
+**Campaign**: PLG - HVAC - Email - DataDriven - Access - v1 (not created yet)
+**Segment files**:
+- `~/Documents/hvac_candidates.json` — Apollo raw candidates
+- `~/Documents/hvac_apollo_clean.json` — Apollo deduped, ready to enrich
+- `~/Documents/hvac_clay_filtered.json` — Clay filtered
+- `~/Documents/hvac_clay_clean.json` — Clay deduped, ready for BillionVerify

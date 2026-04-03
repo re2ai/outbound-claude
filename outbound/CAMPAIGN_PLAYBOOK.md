@@ -8,6 +8,29 @@ CRE and BB campaigns skip Apollo phases — see **CRE/BB-SPECIFIC RULES** sectio
 
 ---
 
+## MANDATORY RULE — Checklist Before Every Transition
+
+**Before advancing to any next phase, switching topics, or resuming after a break:**
+Run through this checklist out loud. Do not skip. Do not assume steps were done in a previous session.
+
+```
+□ Leads enriched and verified (BillionVerify done, deliverables-only)
+□ Copy generated for all leads (no empty Email1/Email2/Email3 fields)
+□ 3-pass copy QA completed (Phase 5B) — user signed off
+□ BigQuery table created and populated (Phase 5C or 8B)
+□ Campaign doc created in Drive and validated by user (Phase 5C)
+□ SmartLead campaign created and fully configured (Phase 6A–6G)
+□ Manual UI steps done: OOO restart ON + AI categorization set (Step 6B-UI)
+□ Campaign launched and status confirmed ACTIVE (Phase 8)
+```
+
+If any box is unchecked, complete it before moving on.
+This rule applies even if the user changes the subject — finish the open phase first, or explicitly confirm with the user to park it.
+
+---
+
+---
+
 ## PHASE 0 — Strategy & Segment Selection
 
 Before touching any API, answer these questions:
@@ -569,6 +592,77 @@ If no dedicated script exists for the campaign type, apply the above rules manua
 
 ---
 
+## PHASE 5C — Campaign Document (Create Before Phase 6)
+
+**Trigger:** Leads are enriched + verified, copy is generated, 3-pass QA is done, and BigQuery table is populated.
+**Do this before touching SmartLead.** User must validate the doc before campaign setup begins.
+
+### What to include
+Create a Google Doc in the Drive folder: https://drive.google.com/drive/folders/19nk7hRcP5wPt9GdlDZy8z_jqwdwPHszG
+
+Name format: `MM.DD.YY - {ICP} Campaign`  (e.g. `04.03.26 - HVAC Campaign`)
+
+The doc must contain (in this order):
+
+```
+{Date} - {ICP} Campaign
+
+Target:      one-sentence description of the audience
+Source:      where leads came from (Apollo keywords / Clay table / list name)
+Size:        N contacts — how they were filtered/deduped
+
+SmartLead Campaigns:
+  {Campaign Name} (ID: XXXXXXX) — N leads | N inboxes | N/day
+  (one row per campaign if split)
+
+BigQuery Table: {table_name}  (dataset: PLG_OUTBOUND or SLG_OUTBOUND)
+
+---
+
+Business Count Tiers (if applicable)
+  Tier → value used
+
+---
+
+Messaging
+
+Email 1 — plain text, no HTML, no links
+Subject: {subject}
+{body}
+
+Email 1 Fallback — no city (if applicable)
+{body}
+
+Email 2 — HTML, no links
+Subject: same thread (no new subject)
+{body}
+
+Email 3 — HTML, no links
+Subject: {subject3}
+{body}
+
+---
+
+Data Fields
+  field_name  →  source / derivation
+```
+
+Keep it compact — only include what's relevant. Omit sections that don't apply (e.g. no Fallback if every lead has a city).
+
+### Style rules
+- No bullet overload — plain readable text
+- Tables only for multi-row data (campaign split, tiers)
+- Show actual email copy exactly as stored (with `{placeholders}`)
+- No explanatory prose — just the facts
+
+### After creating
+Send the Google Doc link to the user with a one-line summary:
+> "Here's the campaign doc: [link]. Please validate before I set up SmartLead."
+
+**Do not proceed to Phase 6 until the user confirms the doc looks correct.**
+
+---
+
 ## PHASE 6 — SmartLead Campaign Setup
 
 **Full checklist. Do every step. Do not skip.**
@@ -599,6 +693,27 @@ Body:
    (API stores internally as `DONT_EMAIL_OPEN` / `DONT_LINK_CLICK` — both work for reads)
 ⚠️ Do NOT use `track_settings` in isolation — always include `send_as_plain_text: true` in same call.
 ⚠️ `force_plain_text` accepted by API (returns 200) but not visible in GET /campaigns/{id} response — it applies internally.
+
+### Step 6B-UI — Manual UI settings (API cannot set these)
+
+Two settings are **not available via API** and must be toggled manually in the SmartLead dashboard
+for every new campaign, immediately after Step 6B. Do this before loading leads.
+
+**1. Automatically restart OOO leads**
+> Campaign settings → Lead Management → "Automatically restart ai-categorised OOO when lead returns" → **ON**
+
+When SmartLead AI detects an out-of-office auto-reply, it pauses that lead's sequence.
+This toggle resumes the sequence automatically once the lead is back — without manual intervention.
+Without it, OOO leads sit paused forever and never receive their follow-ups.
+
+**2. AI lead categorization**
+> Must be configured in the **old SmartLead UI** — the new UI caps at 5 categories.
+> Set up all reply categories (Interested, Meeting Request, Meeting Booked, Information Request,
+> Not Interested, OOO, Wrong Person, Unsubscribe) so SmartLead auto-tags every reply correctly.
+> This powers BQ reporting and determines which leads count as "positive" in campaign stats.
+
+⚠️ Neither setting is exposed in `GET /campaigns/{id}` — you cannot verify them via API.
+   Always do this step manually and confirm in the UI before launching.
 
 ### Step 6C — Set schedule
 ```
