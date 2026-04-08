@@ -2,21 +2,34 @@
 """
 Generate Email1/Subject1/Email2/Email3 custom fields for verified contacts.
 
-UNIVERSAL RULE: Email1 is ALWAYS plain text with \\n line breaks. No HTML, no links.
-Convert \\n\\n to <br><br> and \\n to <br> ONLY at SmartLead load time.
-Emails 2 and 3 ARE HTML (they contain <a href> signup links). Store with <br> tags.
+UNIVERSAL RULE: ALL emails (1, 2, 3) are ALWAYS plain text with \\n line breaks.
+No HTML. No links. No exceptions. Convert \\n\\n to <br><br> and \\n to <br>
+ONLY at SmartLead load time.
+
+PLG goal: get the reader to REPLY and ask for the trial link.
+DO NOT send the link in any email. The link is sent only after they reply.
 
 Two modes depending on segment:
 
-WEB-ENRICH MODE (it_msp, catering, cleaning, signage):
+WEB-ENRICH MODE (it_msp, catering, cleaning, signage, merchant, hvac):
   Requires web_enrich.py to have run first. Uses structured fields
-  (service, smb_type, smb_guess) to fill a fixed template. No GPT needed.
+  (service, smb_type, smb_count) to fill a fixed template. No GPT needed.
+  Two framing variants:
+    - "hyper_personal": opens with "I see {company} does {service} for {smb_type} in {city}"
+      (IT/MSP, Catering -- prospect serves a known client type)
+    - "recurrent": opens with "Do you do {service} for {smb_type} in {city}?"
+      then frames demand as constant/ongoing -- NOT "new openings"
+      (Cleaning, Signage, Merchant, HVAC -- demand never dries up)
 
 DECISION-TREE MODE (insurance):
   GPT writes ONE opening question via decision tree prompt.
   Python assembles rest of Email1 from fixed template.
 
 Both modes: Email2 and Email3 are pure Python mail-merge. No LLM.
+
+smb_count field: must be the EXACT number from BQ
+(business_sources.us_companies_list per city). Do NOT use friendly_count() rounding
+for email copy -- the exact number reads as more credible. Fallback: omit count phrase.
 
 Usage:
   # IT/MSP (run web_enrich.py first):
@@ -33,7 +46,6 @@ import os
 import sys
 import json
 import argparse
-import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
@@ -41,8 +53,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-UTM = "claude-v1"
-TRIAL_URL = "https://landing.re2.ai/resquared-trial-redirect?utm_source=email&utm_medium=link&utm_campaign={utm}&email={email}"
 MAX_WORKERS = 8
 
 # ── Segment config ─────────────────────────────────────────────────────────────
@@ -52,47 +62,69 @@ SEGMENTS = {
     # ── Web-enrich mode segments ───────────────────────────────────────────────
     # These use service/smb_type/smb_guess fields from web_enrich.py.
     # No GPT call needed per contact.
+    #
+    # framing = "hyper_personal" → opener references the prospect's company
+    #   ("I see {company} does {service} for {smb_type} in {city}")
+    #   Best for: IT/MSP, Catering — prospects serve a specific known client type
+    #
+    # framing = "recurrent" → opener frames demand as constant/ongoing
+    #   ("There are always {smb_count} {smb_type} in {city} that need your services")
+    #   Best for: Cleaning, Signage, Merchant, HVAC — demand is always there,
+    #   NOT tied to "new openings" — avoids the impression that leads dry up
 
     "it_msp": {
         "mode": "web_enrich",
+        "framing": "hyper_personal",
         "segment_label": "managed IT",
         "default_service": "managed IT support",
         "default_smb_type": "offices",
         "default_smb_guess": "professional offices",
-        "subject_template": "managed IT x local {smb_type}",
+        "subject_template": "do you serve {smb_type} in {city}?",
     },
     "catering": {
         "mode": "web_enrich",
+        "framing": "hyper_personal",
         "segment_label": "corporate catering",
         "default_service": "corporate catering",
         "default_smb_type": "tech companies",
         "default_smb_guess": "tech companies",
-        "subject_template": "catering x local {smb_type}",
+        "subject_template": "do you cater for {smb_type} in {city}?",
     },
     "cleaning": {
         "mode": "web_enrich",
+        "framing": "recurrent",
         "segment_label": "commercial cleaning",
         "default_service": "commercial cleaning",
         "default_smb_type": "restaurants",
         "default_smb_guess": "restaurants",
-        "subject_template": "cleaning x local {smb_type}",
+        "subject_template": "do you clean {smb_type} in {city}?",
     },
     "signage": {
         "mode": "web_enrich",
+        "framing": "recurrent",
         "segment_label": "signage",
         "default_service": "signage",
-        "default_smb_type": "new businesses",
-        "default_smb_guess": "new business openings",
-        "subject_template": "signage x local {smb_type}",
+        "default_smb_type": "businesses",
+        "default_smb_guess": "businesses",
+        "subject_template": "do you do signage for businesses in {city}?",
     },
-
     "merchant": {
         "mode": "web_enrich",
+        "framing": "recurrent",
         "segment_label": "merchant services",
         "default_service": "merchant services",
         "default_smb_type": "restaurants",
         "default_smb_guess": "restaurants",
-        "subject_template": "merchant services x local {smb_type}",
+        "subject_template": "do you serve {smb_type} in {city}?",
+    },
+    "hvac": {
+        "mode": "web_enrich",
+        "framing": "recurrent",
+        "segment_label": "HVAC",
+        "default_service": "HVAC",
+        "default_smb_type": "commercial buildings",
+        "default_smb_guess": "commercial buildings",
+        "subject_template": "do you do HVAC for {smb_type} in {city}?",
     },
 
     # ── Decision-tree mode segments ────────────────────────────────────────────
@@ -101,9 +133,7 @@ SEGMENTS = {
     "insurance": {
         "mode": "decision_tree",
         "segment_label": "commercial insurance",
-        "subject_template": "commercial insurance x local {vertical}",
-        "default_vertical": "restaurants",
-        "pitch_line": "We have about 1,000 local businesses in {city} that could be a match.",
+        "subject_template": "do you write commercial insurance in {city}?",
         "system_prompt": """Write ONE opening question for a cold email to an independent commercial insurance agent.
 
 Decision tree:
@@ -153,33 +183,56 @@ def build_email1_web_enrich(contact, cfg):
     IMPORTANT: Email1 is ALWAYS plain text with \\n line breaks.
     No HTML tags, no links. Convert to <br> ONLY at SmartLead load time.
 
-    Hi {{firstName}},
+    Two framing variants (set per segment via cfg["framing"]):
 
-    What types of [smb_type] do you do [service] for? Mainly [smb_guess]?
+    HYPER_PERSONAL (it_msp, catering):
+      Opens by referencing what the prospect's company does, then names the exact
+      business count in their city. CTA frames this as "test for free, no card needed"
+      -- connecting them asking for the link directly to free trial access.
 
-    We have about 1,000 [smb_type] in [city] that could be a match. We built an app
-    that uses AI to find [segment_label] companies leads and use AI to email them.
+    RECURRENT (cleaning, signage, merchant, hvac):
+      Opens with a clarifying question about their service area, then frames demand
+      as constant and ongoing -- NOT "new openings" or "new businesses". There are
+      always {smb_count} businesses in {city} that need their services. Same CTA.
 
-    Do you want me to set up a free account for [company] and send you the login to test?
+    smb_count field: use the EXACT number from BQ (business_sources.us_companies_list
+    per city). Do NOT round. If smb_count is not available, omit the count line
+    entirely -- do NOT substitute "thousands of businesses" or any placeholder.
     """
     first_name = (contact.get("first_name") or "").strip()
-    service  = (contact.get("service")   or cfg["default_service"]).strip()
-    smb_type = (contact.get("smb_type")  or cfg["default_smb_type"]).strip()
-    smb_guess = (contact.get("smb_guess") or cfg["default_smb_guess"]).strip()
-    city     = (contact.get("city")      or "your area").strip()
-    company  = (contact.get("company")   or "your company").strip()
-    label    = cfg["segment_label"]
+    service   = (contact.get("service")    or cfg["default_service"]).strip()
+    smb_type  = (contact.get("smb_type")   or cfg["default_smb_type"]).strip()
+    city      = (contact.get("city")       or "your area").strip()
+    company   = (contact.get("company")    or "your company").strip()
+    smb_count_raw = contact.get("smb_count")
 
-    opening = f"Do you do {service} for {smb_type} mainly, or more general SMB?"
     greeting = f"Hi {first_name}," if first_name else "Hi,"
+    framing = cfg.get("framing", "hyper_personal")
 
-    return (
-        f"{greeting}\n\n"
-        f"{opening}\n\n"
-        f"We have about 1,000 {smb_type} in {city} that could be a match. "
-        f"We built an app that uses AI to find {label} companies leads and use AI to email them.\n\n"
-        f"Do you want me to set up a free account for {company} and send you the login to test?"
-    )
+    if framing == "hyper_personal":
+        # IT/MSP, Catering: reference what the prospect's company does
+        count_line = (
+            f"There are {smb_count_raw} {smb_type} in {city} you could be reaching right now.\n\n"
+            if smb_count_raw else ""
+        )
+        return (
+            f"{greeting}\n\n"
+            f"I see {company} does {service} for {smb_type} in {city}.\n\n"
+            f"{count_line}"
+            f"Reply and I'll send you access to test it for free -- no card needed."
+        )
+    else:
+        # RECURRENT (cleaning, signage, merchant, hvac): demand is always there
+        count_line = (
+            f"There are {smb_count_raw} {smb_type} in {city} that always need services like yours.\n\n"
+            if smb_count_raw else ""
+        )
+        return (
+            f"{greeting}\n\n"
+            f"Do you do {service} for {smb_type} in {city}?\n\n"
+            f"{count_line}"
+            f"Reply and I'll send you access to test it for free -- no card needed."
+        )
 
 
 def build_email1_decision_tree(contact, cfg, opening_question):
@@ -189,61 +242,72 @@ def build_email1_decision_tree(contact, cfg, opening_question):
     IMPORTANT: Email1 is ALWAYS plain text with \\n line breaks.
     No HTML tags, no links. Convert to <br> ONLY at SmartLead load time.
 
-    {{firstName}},
+    {first_name},
 
-    [opening_question]
+    [opening_question — GPT-generated, one sentence, max 15 words]
 
-    [pitch_line]
+    There are {smb_count} local businesses in {city} that could be a match.
+    (If smb_count not available, omit the count line entirely — do not substitute a guess.)
 
-    Free accounts this month.
-
-    Should I send you one?
+    Reply and I'll send you access to test it for free -- no card needed.
     """
     first_name = (contact.get("first_name") or "").strip()
-    city  = (contact.get("city") or "your area").strip()
-    pitch = cfg["pitch_line"].format(city=city)
-    greeting = first_name if first_name else "Hi"
+    city       = (contact.get("city") or "your area").strip()
+    greeting   = first_name if first_name else "Hi"
+
+    smb_count_raw = contact.get("smb_count")
+    count_line = (
+        f"There are {smb_count_raw} local businesses in {city} that could be a match.\n\n"
+        if smb_count_raw else ""
+    )
 
     return (
         f"{greeting},\n\n"
         f"{opening_question}\n\n"
-        f"{pitch}\n\n"
-        f"Free accounts this month.\n\n"
-        f"Should I send you one?"
+        f"{count_line}"
+        f"Reply and I'll send you access to test it for free -- no card needed."
     )
 
 
 def build_subject(contact, cfg):
+    smb_type = (contact.get("smb_type") or cfg.get("default_smb_type", "businesses")).strip()
+    city     = (contact.get("city")     or "your area").strip()
     if cfg["mode"] == "web_enrich":
-        smb_type = (contact.get("smb_type") or cfg["default_smb_type"]).strip()
-        return cfg["subject_template"].format(smb_type=smb_type)
+        return cfg["subject_template"].format(smb_type=smb_type, city=city)
     else:
-        return cfg["subject_template"].format(vertical=cfg.get("default_vertical", "restaurants"))
+        return cfg["subject_template"].format(city=city)
 
 
 def build_email2(contact):
-    city  = (contact.get("city") or "your area").strip()
-    email = urllib.parse.quote(contact.get("email", ""), safe="")
-    url   = TRIAL_URL.format(utm=UTM, email=email)
+    """
+    PLG Email 2 -- plain text, no links, no HTML.
+    Goal: surface the city data, reinforce free trial, get a reply.
+    NEVER send the trial link directly -- only on reply.
+    """
+    city      = (contact.get("city")     or "your area").strip()
+    smb_type  = (contact.get("smb_type") or "businesses").strip()
+    smb_count_raw = contact.get("smb_count")
+    smb_count = str(smb_count_raw).strip() if smb_count_raw else "businesses"
+    count_phrase = f"{smb_count} {smb_type}" if smb_count_raw else smb_type
+
     return (
-        f"I ran a quick search in {city} myself this morning.<br>"
-        f"I made a target list of 200 businesses and their contact email that I think would be "
-        f"interested in your services before the end of Q1.<br><br>"
-        f"You can access all the local business data for {city}.<br><br>"
-        f'<a href="{url}">Access {city} Lead Data</a><br><br>'
-        f"This is for a free account to try it yourself. Would love your feedback."
+        f"I ran a quick search in {city} this morning.\n\n"
+        f"There are {count_phrase} in {city} that look like they could use your services.\n\n"
+        f"Just reply and I'll send you access to test it for free -- no card needed."
     )
 
 
 def build_email3(contact):
-    city  = (contact.get("city") or "your area").strip()
-    email = urllib.parse.quote(contact.get("email", ""), safe="")
-    url   = TRIAL_URL.format(utm=UTM, email=email)
+    """
+    PLG Email 3 -- plain text, no links, no HTML.
+    Brief last touch. Gets its own Subject3 (new angle) so it starts a fresh thread.
+    """
+    city = (contact.get("city") or "your area").strip()
+
     return (
-        f"Since I'm guessing you're busy, I'll just leave this here so you can check the data "
-        f"whenever you have a moment.<br><br>"
-        f"You can access all the local business data for {city}.<br><br>"
-        f'<a href="{url}">Access {city} Lead Data</a>'
+        f"Leaving this here in case the timing wasn't right.\n\n"
+        f"All the local business data for {city} is ready whenever you want to test it.\n\n"
+        f"Just reply and I'll send over the access."
     )
 
 

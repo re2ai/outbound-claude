@@ -49,7 +49,17 @@ Pull `SEARCH_LOG.md` and campaign stats. Ask:
 - Are there any existing contacts in HubSpot from this segment already?
 
 ### Benchmark reply rates — always pull live, never assume
-Do not use hardcoded numbers. Pull actual all-time positive reply rates per campaign:
+Do not use hardcoded numbers. Pull actual all-time positive reply rates per campaign.
+
+**Segment benchmarks (from 226K emails, April 2026):**
+| Segment | Positive rate | Email 1 | Email 2 |
+|---|---|---|---|
+| CRE | 2.50% | 2.37% | 2.73% |
+| BB | 2.40% | 2.83% | 2.16% |
+| PLG | 0.37% | 0.54% | 0.28% |
+
+These are the baselines to beat. Any new campaign variant below these rates needs copy revision.
+For detailed copy analysis by segment, run: `python analyze_copy_segments.py` (outbound/).
 
 ```python
 # smartlead_pull.py has get_plg_campaign_breakdown() — use it
@@ -124,7 +134,286 @@ If user skips enrichment, proceed with `_verified.json` as the copy gen input.
 Follow Phase 5 as normal, using CRE-specific templates and CTAs:
 - Email 1: personalized to the broker's listing (if enriched) — address, type, size
 - Email 2: follow-up referencing listing data, reply-based CTA
-- Email 3: new subject/trigger, brief last touch
+- Email 3: new subject/trigger, brief last touch (see Email 3 warning in Phase 5)
+
+---
+
+### CRE COPY INTELLIGENCE (data-backed, 229K emails analyzed)
+
+**What the numbers show:**
+- Best CRE Email 1: **2.37% positive rate** (69K sent)
+- Best CRE Email 2: **2.73% positive rate** (64K sent) — Email 2 outperforms Email 1 for CRE
+- Email 3: **0.09% positive rate** across all segments — effectively dead weight
+
+#### CRE — Subject Lines That Win
+
+Rank subjects by positive reply rate from 137K CRE emails sent:
+
+| Subject format | + Rate | Example |
+|---|---|---|
+| `retail leasing question` | 11.11% | exact phrase |
+| `retail tenant question` | 6.99% | exact phrase |
+| `retail tenant inquiry` | 6.40% | exact phrase |
+| `tenant fit for [property_type]?` | 5.66% | "tenant fit for retail?" |
+| `office tenant inquiry` | 4.40% | exact phrase |
+| `tenant for this office?` | 4.12% | exact phrase |
+| `office space available?` | 3.75% | exact phrase |
+| `leasing this office?` | 3.51% | exact phrase |
+| `your listing at [ADDRESS]` | ~2-4% | HyperPersonal, address-specific |
+
+**Rule:** Subject must reference an ASSET the broker owns (their listing/space), not what we sell.
+Do NOT use: `"commercial real estate x local businesses"`, `"tenant sourcing services"`, etc.
+
+For HyperPersonal campaigns (listing enrichment done): `"your listing at [ADDRESS]"` is the gold standard.
+For non-enriched campaigns: use the generic inquiry format — `"retail tenant question"` is proven at scale.
+
+#### CRE — Email 1 Winning Structure
+
+**Best performing template (12.5% on small n, 5-7% at scale):**
+```
+Hi [Name],
+
+What type of retail tenant did you have in mind for [ADDRESS]?
+
+We have [N] retail tenants in [City] looking for space — happy to share the list if it's useful.
+
+[Sender]
+```
+
+**Standard HyperPersonal template (2-4% positive at scale):**
+```
+Hey [Name],
+
+For the space available at [ADDRESS], were you open to a [tenant type]?
+
+We have contact info for over [N] [tenant type] operators in [City] and 15M local biz across the US.
+
+Not sure what use you had in mind! Let me know what type of use you are targeting and I can share more info!
+
+[Sender]
+```
+
+**Why it works:**
+- Opens with THEIR listing address — not what we sell
+- One question about their current need (not a product pitch)
+- One data point proving we can actually help
+- Soft CTA — "let me know" / no pressure
+- 4-5 lines, zero fluff, zero buzzwords
+
+**What to avoid:**
+- ❌ Any sentence describing the platform ("We built a tool that...")
+- ❌ "AI-powered" / "automated" / "platform" language
+- ❌ Urgency pressure ("limited spots", "this month only")
+
+#### CRE — Email 2 Winning Structure
+
+**Dominant winner (4.56–4.87% positive across hundreds of sends):**
+```
+Hi [Name],
+
+Just following up on [ADDRESS], [City, State].
+
+Is it still available?
+
+Are you looking for a national or local tenant? If you are looking for a local operator let me know and I can share more.
+
+[Sender]
+```
+
+**Why it works:**
+- Zero pitch — just a status question on their listing
+- "Is it still available?" is the most natural question a real tenant rep would ask
+- Opens a conversation rather than repeating the offer
+- Ultra-short — 4 lines
+
+**Avoid for CRE Email 2:**
+- ❌ Introducing a new value angle ("Did you know we also have...")
+- ❌ Generic follow-up language ("Just circling back", "Wanted to touch base")
+- ❌ Restating the platform pitch from Email 1
+
+---
+
+### BB COPY INTELLIGENCE (data-backed, 16K emails analyzed)
+
+**What the numbers show:**
+- BB Email 1: **2.83% positive rate** (8,388 sent)
+- BB Email 2: **2.16% positive rate** (6,727 sent)
+- Niche business-type subjects outperform generic 4x (small samples but consistent signal)
+
+#### BB — Subject Lines That Win
+
+| Subject format | + Rate | Notes |
+|---|---|---|
+| `you help sell car wash?` | 13.33% | niche — small n |
+| `you help sell cafes?` | 13.33% | niche — small n |
+| `you help sell hvac?` | 12.50% | niche — small n |
+| `you help sell flooring?` | 11.11% | niche — small n |
+| `you sell Construction businesses?` | 10.53% | niche variant |
+| `you help sell roofing?` | 5.41% | growing sample |
+| `you help sell pizzerias?` | 4.76% | solid volume |
+| `Connecting with business owners exploring a sale` | 5.00% | **underused — only 40 sends, scale this** |
+| `you help sell businesses?` | 3.21% | generic but 1,370 sends = high volume |
+
+**Rule:** Use the specific business type (`car wash`, `cafe`, `flooring`) whenever the list is segmented by type.
+`"you help sell businesses?"` is the fallback for unsegmented lists — still decent at 3.21%.
+`"Connecting with business owners exploring a sale"` at 5.00% is massively underused — prioritize scaling this.
+
+#### BB — Email 1 Winning Structure
+
+**Top performer (proven across positive replies):**
+```
+[Name], we have [business type] business owners in [City] who may be exploring a sale.
+
+Would you be interested in connecting with them? Let me know.
+
+[Sender]
+```
+
+**HyperPersonal variant (when you have their listing from BizBuySell/Focal5):**
+```
+[Name], noticed your listing for a [business type] on [source].
+
+We have a platform that connects you with [business type] business owners in [City] who may be exploring a sale.
+
+Would you be interested in connecting with them? Let me know.
+
+[Sender]
+```
+
+**Why it works:**
+- Zero product description — pure value proposition in one line
+- References a specific business type and city they operate in
+- Single low-friction ask: "Would you be interested?"
+- Reads like a real business referral, not a SaaS pitch
+
+#### BB — Email 2 Winning Structure
+
+**Dominant winner (2.03% positive across 4,630 sends):**
+```
+[Name], reached out a few days ago about [business type] owners in [City] who may be exploring a sale.
+
+Would you be interested in connecting with them? Let me know.
+
+[Sender]
+```
+
+Pure callback. Same offer, same frame, no new pitch. This is intentional — consistency outperforms novelty for BB Email 2.
+
+---
+
+### PLG COPY INTELLIGENCE (data-backed, 229K emails analyzed)
+
+**Benchmarks:**
+- PLG Email 1: **0.54% positive rate** (vs CRE 2.37%, BB 2.71%) — ~5x gap driven by framing, not just volume
+- PLG Email 2: **0.28% positive rate** — follow-up barely moves the needle with current copy
+- Email 3: **0.09% positive rate** — effectively dead weight across all segments (see Email 3 warning)
+
+**Root cause of PLG underperformance vs CRE/BB:**
+CRE/BB subjects reference THE PROSPECT'S ASSET (their listing, their niche). PLG subjects previously referenced OUR PRODUCT ("managed IT x local offices"). CRE/BB opens with a concrete real-world hook. PLG opened with a platform description. The fix: make PLG copy feel like CRE/BB — reference the prospect's market, frame the data as something they can test live, and let the reply → free trial flow do the closing.
+
+**Key copy rules for PLG (all segments):**
+
+1. **Subject line = question about their market, not a label for our product**
+   - Before: `"managed IT x local offices"` (product framing)
+   - After: `"do you serve offices in Austin?"` (prospect's market framing)
+   - The question subject drives curiosity the same way CRE's asset-reference does
+
+2. **Remove ALL product description language from Email 1**
+   - ❌ `"We built an app that uses AI to find [label] companies leads and use AI to email them."`
+   - ❌ Any sentence that explains what Resquared is before they ask
+   - ✅ Let them discover the platform when they get the trial link — not before
+
+3. **Use EXACT business counts (not rounded)**
+   - ❌ `"about 1,000 restaurants"` — sounds estimated, generic
+   - ✅ `"1,847 restaurants"` — reads as real data they can verify
+   - Source: `business_sources.us_companies_list__30m_us_business_std` per city (baked in at lead load time)
+   - Fallback if count unavailable: omit count phrase rather than guess
+
+4. **CTA = test for free, not "want the list?"**
+   - ❌ `"Want the list?"` — sounds like a data broker selling a CSV
+   - ❌ `"Do you want me to set up a free account?"` — passive, SaaS-y
+   - ✅ `"Free to test how you can reach them? Reply and I'll send you access to test it for free -- no card needed."`
+   - ✅ `"Free to check how you can reach them? Reply and I'll send you access to test it for free -- no card needed."`
+   - The "test for free / check for free" framing directly connects: reply → get link → test live → no risk
+
+---
+
+#### PLG Email 1 Templates by Segment
+
+**HYPER_PERSONAL framing** — IT/MSP, Catering
+*(Use when web_enrich.py found a specific client type they serve.)*
+
+```
+Hi {first_name},
+
+I see {company} does {service} for {smb_type} in {city}.
+
+There are {smb_count} {smb_type} in {city} you could be reaching right now.
+
+Free to test how you can reach them? Reply and I'll send you access to test it for free -- no card needed.
+```
+
+Subject: `"do you serve {smb_type} in {city}?"`
+
+**RECURRENT framing** — Commercial Cleaning, Signage, Merchant Services, HVAC
+*(Frame demand as constant and ongoing. NOT "new openings" or "new businesses"
+-- prospects should feel there are always businesses needing their services, not
+that leads will dry up once new-opening activity slows down.)*
+
+```
+Hi {first_name},
+
+Do you do {service} for {smb_type} in {city}?
+
+There are {smb_count} {smb_type} in {city} that always need services like yours.
+
+Free to check how you can reach them? Reply and I'll send you access to test it for free -- no card needed.
+```
+
+Subject examples:
+- Cleaning: `"do you clean restaurants in Austin?"`
+- Signage: `"do you do signage for businesses in Dallas?"`
+- Merchant: `"do you serve restaurants in Chicago?"`
+- HVAC: `"do you do HVAC for commercial buildings in Denver?"`
+
+**Why "always" matters for recurrent segments:**
+HVAC, cleaning, signage, and merchant services have CONTINUOUS demand -- existing businesses need HVAC maintenance, cleaning contracts, new signs, and payment processing all the time. Framing around "new openings" implicitly caps the TAM to businesses that opened recently. "There are always X businesses that need your services" is both more accurate and more motivating.
+
+---
+
+#### PLG Email 2 Winning Structure
+
+Email 2 is plain text, no links. Goal: reinforce city data, remind about free trial, get a reply.
+
+```
+I ran a quick search in {city} this morning.
+
+There are {smb_count} {smb_type} in {city} that look like they could use your services.
+
+Just reply and I'll send you access to test it for free -- no card needed.
+```
+
+Keep it short. No new pitch. The "access link" mention + "no card needed" is the only CTA needed.
+
+---
+
+#### PLG Subject Line Guidance
+
+| Segment | Preferred subject format | Example |
+|---------|-------------------------|---------|
+| IT/MSP | `"do you serve {smb_type} in {city}?"` | `"do you serve offices in Austin?"` |
+| Catering | `"do you cater for {smb_type} in {city}?"` | `"do you cater for tech companies in SF?"` |
+| Cleaning | `"do you clean {smb_type} in {city}?"` | `"do you clean restaurants in Chicago?"` |
+| Signage | `"do you do signage for businesses in {city}?"` | `"do you do signage for businesses in Dallas?"` |
+| Merchant | `"do you serve {smb_type} in {city}?"` | `"do you serve restaurants in Miami?"` |
+| HVAC | `"do you do HVAC for {smb_type} in {city}?"` | `"do you do HVAC for commercial buildings in Denver?"` |
+
+**What these subject lines do (same mechanic as CRE's asset-reference subjects):**
+- They reference THE PROSPECT'S MARKET, not our product
+- The question format creates an open loop — the answer is obvious ("yes") which primes engagement
+- City inclusion adds specificity that generic subjects lack
+
+---
 
 ### Step CRE-4 — BigQuery sync (SLG tables, not PLG)
 After loading leads, sync to the **SLG** dataset — NOT PLG_OUTBOUND:
@@ -321,22 +610,41 @@ it will trigger HTML rendering in some email clients and destroy deliverability.
 - ONE specific vertical mentioned (not "local businesses" — say "restaurants", "retailers", "contractors")
 - NO "I hope this finds you well", no filler openers
 **PLG CTAs** — goal is to get them to ask for the trial link (do NOT send the link):
-  - ✅ "Should I send you one?" (winner)
-  - ✅ "Want me to send over the results?"
+  - ✅ "Reply and I'll send you access to test it for free -- no card needed." (current template)
+  - ✅ "Should I send you one?" (tested winner in earlier campaigns)
+  - ❌ "Want the list?" (sounds like a data broker selling a CSV)
   - ❌ "Want the link?" (sounds phishing-adjacent)
   - ❌ "Are you the best person to reach out to?" (worst tested — 0.254% positive)
 
-**CRE/BB CTAs** — goal is a reply, interest signal, or demo request:
-  - ✅ "Open to a quick demo?"
-  - ✅ "Let me know if you'd like to discuss."
-  - ✅ "Happy to connect if this is relevant."
+**CRE CTAs** — goal is to get them to tell you what tenant type they want:
+  - ✅ "Let me know what type of use you are targeting and I can share more info!"
+  - ✅ "Are you looking for a national or local tenant? If local, let me know."
+  - ✅ "Not sure what use you had in mind — let me know if you are looking local."
+  - ❌ "Open to a quick demo?" (too transactional for CRE — they want tenants, not a demo)
   - ❌ Hard sells, urgency pressure, or forced scheduling links
 
-**Subject line format:** `"[service type] x local [specific vertical]"`
-- ✅ "window cleaning x local medical offices" → 4.76% reply
-- ✅ "cleaning x local restaurants"
-- ❌ "janitorial supplies in Dallas" → 0.00%
-- No location in subject. No company name in subject unless it's a Blunt-style template.
+**BB CTAs** — goal is a simple yes/no on connecting with sellers:
+  - ✅ "Would you be interested in connecting with them? Let me know."
+  - ✅ "Let me know if this is something you'd want to explore."
+  - ❌ Long pitches, product descriptions, or platform language
+
+**Subject line format by segment:**
+
+*CRE:* Reference the broker's asset — their listing or property type.
+  - ✅ `"retail tenant question"` → 6.99% positive at scale
+  - ✅ `"retail leasing question"` → 11.11% positive
+  - ✅ `"your listing at [ADDRESS]"` → HyperPersonal, address-specific (2-4%)
+  - ✅ `"office space available?"` → 3.75% positive
+  - ❌ `"commercial real estate x local businesses"` → product-framing, not asset-framing
+  - No generic "[service] x local businesses" format for CRE
+
+*BB:* Name the specific business type they sell.
+  - ✅ `"you help sell [business type]?"` → 5-13% for niche types
+  - ✅ `"Connecting with business owners exploring a sale"` → 5.00%, underused
+  - ✅ `"you help sell businesses?"` → 3.21% fallback for unsegmented lists
+  - ❌ Generic subject lines that don't reference the business type
+
+*PLG:* See Phase 5 PLG subject line guidance below.
 
 ### LLM Copywriting — How to get non-garbage output
 
@@ -433,12 +741,34 @@ Made a list of {businesses} that look like they could use your services.
 Just reply and I'll send you the data.
 ```
 
-**CRE/BB approach** — reference listings or local data, ask to discuss:
+**CRE approach** — reference their specific listing, ask a status question (proven 4.56–4.87% positive):
 ```
-Ran a quick search for retail spaces in {city} that match what your tenants are looking for.
+Hi {first_name},
 
-Let me know if you'd like to take a look — happy to walk you through it.
+Just following up on {listing_address}, {listing_city_state}.
+
+Is it still available?
+
+Are you looking for a national or local tenant? If you are looking for a local operator let me know and I can share more.
+
+{sender_name}
+{sender_title} @ Resquared (re2.ai)
 ```
+
+Do NOT restate the pitch. Do NOT introduce a new angle. A simple status question on their listing
+outperforms every other CRE Email 2 approach. Email 2 outperforms Email 1 for CRE (2.73% vs 2.37%).
+
+**BB approach** — pure callback, same offer, same frame (proven 2.03% positive across 4,630 sends):
+```
+{first_name}, reached out a few days ago about {business_type} owners in {city} who may be exploring a sale.
+
+Would you be interested in connecting with them? Let me know.
+
+{sender_name}
+{sender_title} @ Resquared (re2.ai)
+```
+
+Do NOT introduce new content. Consistency beats novelty for BB Email 2.
 
 Do NOT use stale time phrases ("before the end of Q1", "before the holidays"). Keep it timeless.
 
@@ -448,35 +778,35 @@ city = COALESCE(NULLIF(TRIM(city),''), NULLIF(TRIM(company_city),''), 'your area
 ```
 Never leave `{city}` blank — if both `city` and `company_city` are missing, fall back to `"your area"`.
 
-**Business count rule — use real data, display as friendly rounded number:**
+**Business count rule — use the EXACT count from BQ:**
 - Query `business_sources.us_companies_list__30m_us_business_std` for `COUNT(*) WHERE city = '{city}'`
-- Round using this logic (never show raw count):
-  - Find the largest "nice" breakpoint ≤ count → `floor_bp`
-  - Find the smallest "nice" breakpoint > count → `ceil_bp`
-  - If `count / ceil_bp >= 0.97` → display as `"almost {ceil_bp:,}"`
-  - Otherwise → display as `"over {floor_bp:,}"`
-- Nice breakpoints: 50, 100, 150, 200, 250, 300, 400, 500, 750, 1,000, 1,500, 2,000, 2,500, 3,000, 5,000, 7,500, 10,000, 15,000, 20,000, 25,000, 30,000, 50,000, 75,000, 100,000, 150,000, 200,000+
-- Examples: 290 → "over 250" | 982 → "almost 1,000" | 30,231 → "over 30,000"
-- If city has no match in BQ → fall back to `"thousands of businesses"`
+- Store the raw integer as `smb_count` on the contact. Do NOT round or apply `friendly_count()`.
+- The exact number (e.g. `1,847`) reads as real data and is more credible than rounded estimates.
+- If city has no match in BQ → **omit the count line entirely**. Do not substitute any placeholder ("thousands of businesses", "hundreds of businesses", etc.).
 
 Template (mail-merge, no LLM needed — plain text, \n line breaks):
 ```
-I ran a quick search in {city} myself this morning.
+I ran a quick search in {city} this morning.
 
-Made a list of {businesses} that look like they could use your services.
+There are {smb_count} {smb_type} in {city} that look like they could use your services.
 
-Just reply and I'll send you the data.
+Just reply and I'll send you access to test it for free -- no card needed.
 ```
+If `smb_count` is not available for this city, omit the count line — do not substitute a placeholder.
 
 ### Email 3 — Last touch (plain text, no links, day +8)
+
+> ⚠️ **DATA WARNING — Email 3 returns 0.09% positive rate across 13,944 sends (13 total positive replies).
+> This is statistically dead weight. Strongly consider running 2-email sequences only.
+> Only include Email 3 if the user explicitly requests it, and note the yield is near zero.**
 
 Email 3 is plain text, stored with `\n` line breaks. No HTML, no links.
 
 **Sequence threading:** Email 3 HAS its own subject line — a new angle/trigger. This starts a fresh thread (not a reply to Email 1), making it feel like a separate outreach rather than a third follow-up. Pick a subject that's different from Email 1's angle.
 
 **Subject line:** Different trigger from Email 1. Examples:
-- Email 1: `"cleaning x local restaurants"` → Email 3: `"local restaurant contacts in {city}"`
-- Email 1: `"IT services x local businesses"` → Email 3: `"MSP leads in {city}"`
+- Email 1: `"do you clean restaurants in {city}?"` → Email 3: `"local restaurant contacts in {city}"`
+- Email 1: `"do you serve offices in {city}?"` → Email 3: `"MSP leads in {city}"`
 - Email 1: `"retail listings in {city}"` → Email 3: `"{city} tenant prospects"`
 
 **PLG approach** — brief, last shot, reply to get the link:
@@ -633,11 +963,11 @@ Subject: {subject}
 Email 1 Fallback — no city (if applicable)
 {body}
 
-Email 2 — HTML, no links
+Email 2 — plain text, no links
 Subject: same thread (no new subject)
 {body}
 
-Email 3 — HTML, no links
+Email 3 — plain text, no links
 Subject: {subject3}
 {body}
 
@@ -901,30 +1231,20 @@ sql = """
     WHERE city IN UNNEST(@cities)
     GROUP BY city
 """
-# Then apply rounding:
-BREAKPOINTS = [50,100,150,200,250,300,400,500,750,1000,1500,2000,2500,3000,
-               5000,7500,10000,15000,20000,25000,30000,50000,75000,100000,
-               150000,200000,250000,300000,500000]
-
-def friendly_count(n):
-    if not n or n <= 0: return None
-    floor_bp = max((b for b in BREAKPOINTS if b <= n), default=None)
-    ceil_bp  = min((b for b in BREAKPOINTS if b > n),  default=None)
-    if floor_bp is None: return None
-    if ceil_bp and n / ceil_bp >= 0.97:
-        return f"almost {ceil_bp:,}"
-    return f"over {floor_bp:,}"
-
-count_str = friendly_count(city_counts.get(city))  # e.g. "over 30,000" or "almost 1,000"
-businesses = f"{count_str} businesses" if count_str else "thousands of businesses"
+# Use exact count -- do NOT round. Omit count line if city has no BQ match.
+smb_count = city_counts.get(city)  # raw integer or None
 ```
 
 **3. Build Email2 with real city + count baked in (plain text, no links):**
 ```python
+count_line = (
+    f"There are {smb_count} {smb_type} in {city} that look like they could use your services.\n\n"
+    if smb_count else ""
+)
 email2 = (
-    f"I ran a quick search in {city} myself this morning.\n\n"
-    f"Made a list of {businesses} that look like they could use your services.\n\n"
-    f"Just reply and I'll send you the data."
+    f"I ran a quick search in {city} this morning.\n\n"
+    f"{count_line}"
+    f"Just reply and I'll send you access to test it for free -- no card needed."
 )
 ```
 
@@ -941,7 +1261,7 @@ Body:
       "company_name": "Smith Insurance Agency",
       "location": "Austin, Texas",
       "custom_fields": {
-        "Subject1": "insurance x local restaurants",
+        "Subject1": "do you write commercial insurance in Austin?",
         "Subject3": "local restaurant contacts in Austin",
         "Email1": "John\n\nOpening question here.\n\nPitch + CTA.",
         "Email2": "plain text email 2 with \\n line breaks, no HTML, no links",

@@ -57,7 +57,7 @@ Hey Griffin! A bunch of rules were tightened in `CAMPAIGN_PLAYBOOK.md` during th
 9. **UTM format updated:** `utm_source=email&utm_medium=smartlead&utm_campaign={slug}&utm_content=email2` (or `email3`) `&email={url_encoded_email}`. Previously used `utm_medium=link&utm_campaign=claude-v1` — do not use that format going forward.
 10. **City + business count must be baked in at lead load time (Step 6G):**
     - City: `COALESCE(city, company_city, 'your area')` — never leave blank
-    - Business count: query `business_sources.us_companies_list__30m_us_business_std` per city, apply `friendly_count()` rounding → `"over X"` or `"almost X"`. Fallback: `"thousands of businesses"`.
+    - Business count: query `business_sources.us_companies_list__30m_us_business_std` per city. Use the **exact count** — do NOT apply `friendly_count()` rounding. The exact number reads as more credible in email copy. Fallback: omit the count phrase entirely (do not substitute "thousands of businesses" or any placeholder).
     - Do NOT hardcode a number (e.g. "200 businesses") — always use real data.
     - Full logic + code in `CAMPAIGN_PLAYBOOK.md` Step 6G.
 11. **Signatures — only apply if missing:** Run `smartlead_update_signatures.py --only-missing` during campaign launch. Only force-update all when titles change. Title map is in the script itself.
