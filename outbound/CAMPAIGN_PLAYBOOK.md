@@ -175,10 +175,10 @@ ORDER BY domain, days_since_last_contact DESC
 | `closed_won` | — | **Never** |
 | `churned` | 180 days | **Never in new campaigns** |
 
-**Big CRE override note:** These 13 large brokerages (jll, cbre, colliers, etc.) have hundreds of contacts each and a 30-day cooldown. **Do not enroll all contacts from the same company at once.** Cap at **5–10 per company per campaign**, filtered by `earliest_eligible_date <= CURRENT_DATE()`. Pick the contacts with the most recent `earliest_eligible_date` (i.e. just became eligible) to spread re-enrollment over time.
+**Big CRE override note:** These 13 large brokerages (jll, cbre, colliers, etc.) have hundreds of contacts each and a 30-day cooldown. **Do not enroll all contacts from the same company at once.** Cap at **100 per company per campaign**, filtered by `earliest_eligible_date <= CURRENT_DATE()`. Pick the contacts with the most recent `earliest_eligible_date` (i.e. just became eligible) to spread re-enrollment over time.
 
 ```sql
--- Big CRE: up to 10 per company, eligible only
+-- Big CRE: up to 100 per company, eligible only
 SELECT email, first_name, last_name, domain, company_name,
        pipeline_stage_for_rule, days_since_last_contact, earliest_eligible_date
 FROM (
@@ -188,7 +188,7 @@ FROM (
   WHERE pipeline_stage_for_rule = 'big_cre_override'
     AND earliest_eligible_date <= CURRENT_DATE()
 )
-WHERE rn <= 10
+WHERE rn <= 100
 ORDER BY domain, earliest_eligible_date DESC
 ```
 
