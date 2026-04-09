@@ -118,10 +118,35 @@ CRE leads come from **BigQuery** — `tenant-recruitin-1575995920662.MARKETSEGME
 
 ### Step CRE-0 — Contact selection from BigQuery
 
-Query only contacts that are:
-1. `can_reenroll = TRUE` — already past their cooldown, safe to contact
-2. `pipeline_stage_for_rule IN ('never_reached', 'smartlead_only', 'positive_reply')` — new campaign targets only; never re-engage `has_deal`, `demo`, `proposal`, `verbal_commit`, `closed_won`, or `churned` in new campaigns
+Query only contacts that are eligible for new campaigns. Always run the **sizing query first**, then pull the full list.
 
+#### Sizing query (run first — check table freshness)
+```sql
+SELECT
+  pipeline_stage_for_rule,
+  COUNT(*) AS contacts,
+  COUNT(DISTINCT domain) AS companies
+FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.CRE_FORECASTING_V1`
+WHERE earliest_eligible_date <= CURRENT_DATE()
+  AND pipeline_stage_for_rule IN ('never_reached', 'smartlead_only', 'positive_reply')
+GROUP BY pipeline_stage_for_rule
+ORDER BY contacts DESC
+```
+
+Also check big CRE override separately:
+```sql
+SELECT
+  can_reenroll,
+  COUNT(*) AS contacts,
+  COUNT(DISTINCT domain) AS companies
+FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.CRE_FORECASTING_V1`
+WHERE pipeline_stage_for_rule = 'big_cre_override'
+GROUP BY can_reenroll
+```
+
+**Table freshness check:** If `earliest_eligible_date` returns significantly more contacts than `can_reenroll = TRUE`, the table is stale. Run `build_cre_forecasting_table_v2.py` to rebuild before pulling the final list. `can_reenroll` is a pre-computed snapshot — `earliest_eligible_date <= CURRENT_DATE()` is always the authoritative gate.
+
+#### Contact pull query
 ```sql
 SELECT
   email,
@@ -133,18 +158,24 @@ SELECT
   days_since_last_contact,
   earliest_eligible_date
 FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.CRE_FORECASTING_V1`
-WHERE can_reenroll = TRUE
-  AND pipeline_stage_for_rule IN ('never_reached', 'smartlead_only', 'positive_reply')
+WHERE earliest_eligible_date <= CURRENT_DATE()
+  AND pipeline_stage_for_rule IN ('never_reached', 'smartlead_only', 'positive_reply',
+                                   'big_cre_override')
 ORDER BY domain, days_since_last_contact DESC
 ```
 
-**Cooldown reference (what's baked into `can_reenroll`):**
-| Stage | Cooldown |
-|---|---|
-| `never_reached` | Always eligible |
-| `smartlead_only` | 60 days since last contact |
-| `positive_reply` | 60 days since last reply/contact |
-| Big CRE firms (jll.com, cbre.com, etc.) | 30 days regardless of stage |
+**Stage rules — what's in scope for new campaigns:**
+| Stage | Cooldown | Include? |
+|---|---|---|
+| `never_reached` | Always eligible | Yes |
+| `smartlead_only` | 60 days since last contact | Yes |
+| `positive_reply` | 60 days since last reply/contact | Yes |
+| `big_cre_override` | 30 days (jll.com, cbre.com, colliers.com, etc.) | Yes — include in pull, consider separate campaign |
+| `has_deal` / `demo` / `proposal` / `verbal_commit` | — | **Never** |
+| `closed_won` | — | **Never** |
+| `churned` | 180 days | **Never in new campaigns** |
+
+**Big CRE override note:** These 13 large brokerages (jll, cbre, colliers, etc.) have hundreds of contacts each and a 30-day cooldown. They can be included in the main campaign or run as a separate campaign depending on volume. Always flag the count to the user before including them.
 
 **One contact per company (default):**
 - After the query, deduplicate to **1 contact per domain**. Pick the contact with the highest `days_since_last_contact` (longest rested). If it's `never_reached`, pick any.
