@@ -175,7 +175,24 @@ ORDER BY domain, days_since_last_contact DESC
 | `closed_won` | — | **Never** |
 | `churned` | 180 days | **Never in new campaigns** |
 
-**Big CRE override note:** These 13 large brokerages (jll, cbre, colliers, etc.) have hundreds of contacts each and a 30-day cooldown. They can be included in the main campaign or run as a separate campaign depending on volume. Always flag the count to the user before including them.
+**Big CRE override note:** These 13 large brokerages (jll, cbre, colliers, etc.) have hundreds of contacts each and a 30-day cooldown. **Do not enroll all contacts from the same company at once.** Cap at **5–10 per company per campaign**, filtered by `earliest_eligible_date <= CURRENT_DATE()`. Pick the contacts with the most recent `earliest_eligible_date` (i.e. just became eligible) to spread re-enrollment over time.
+
+```sql
+-- Big CRE: up to 10 per company, eligible only
+SELECT email, first_name, last_name, domain, company_name,
+       pipeline_stage_for_rule, days_since_last_contact, earliest_eligible_date
+FROM (
+  SELECT *,
+    ROW_NUMBER() OVER (PARTITION BY domain ORDER BY earliest_eligible_date DESC) AS rn
+  FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.CRE_FORECASTING_V1`
+  WHERE pipeline_stage_for_rule = 'big_cre_override'
+    AND earliest_eligible_date <= CURRENT_DATE()
+)
+WHERE rn <= 10
+ORDER BY domain, earliest_eligible_date DESC
+```
+
+Always flag the per-company counts to the user before including big CRE contacts. They can be folded into the main campaign or run separately depending on volume.
 
 **One contact per company (default):**
 - After the query, deduplicate to **1 contact per domain**. Pick the contact with the highest `days_since_last_contact` (longest rested). If it's `never_reached`, pick any.
