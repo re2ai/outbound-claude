@@ -8,17 +8,30 @@ CRE and BB campaigns skip Apollo phases — see **CRE/BB-SPECIFIC RULES** sectio
 
 ---
 
-## MANDATORY RULE — Checklist Before Every Transition
+## MANDATORY RULE — Step-by-Step Execution (All Campaigns)
+
+**Guide the user through every campaign one step at a time. This applies to PLG, CRE, and BB alike.**
+
+At every step:
+1. State which step/phase you are on and what it does
+2. Show key outputs (contact counts, verification yield, copy samples, etc.)
+3. Flag any deviations from playbook defaults
+4. Ask: **"Ready to move to [next step/phase]?"** before proceeding
+
+If a step was skipped or done out of order, call it out explicitly:
+> "We skipped [step name]. Do you want to go back and run it, or continue without it?"
+
+Do not move to the next step without explicit confirmation from the user.
 
 **Before advancing to any next phase, switching topics, or resuming after a break:**
-Run through this checklist out loud. Do not skip. Do not assume steps were done in a previous session.
+Also run through this checklist. Do not skip. Do not assume steps were done in a previous session.
 
 ```
 □ Leads enriched and verified (BillionVerify done, deliverables-only)
 □ Copy generated for all leads (no empty Email1/Email2/Email3 fields)
 □ 3-pass copy QA completed (Phase 5B) — user signed off
-□ BigQuery table created and populated (Phase 5C or 8B)
-□ Campaign doc created in Drive and validated by user (Phase 5C)
+□ Full lead+copy BQ table written (Phase 5C) — user confirmed before proceeding
+□ Campaign doc created in Drive and validated by user (Phase 5D)
 □ SmartLead campaign created and fully configured (Phase 6A–6G)
 □ Manual UI steps done: OOO restart ON + AI categorization set (Step 6B-UI)
 □ Campaign launched and status confirmed ACTIVE (Phase 8)
@@ -100,13 +113,65 @@ CRE and BB campaigns diverge from the PLG flow in several important ways. Read t
 before starting any SLG campaign. Everything not listed here follows the standard phases below.
 
 ### Input source
-CRE/BB leads come as a **CSV file** (from LoopNet, Crexi, or an existing enriched database).
+CRE leads come from **BigQuery** — `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.CRE_FORECASTING_V1`.
 **Skip Phases 1–4 entirely** (no Apollo search, no Apollo enrichment, no dedup against Apollo tables).
 
-### Step CRE-1 — Email deliverability check (BillionVerify only)
-Run BillionVerify on the raw CSV before doing anything else:
+### Step CRE-0 — Contact selection from BigQuery
+
+Query only contacts that are:
+1. `can_reenroll = TRUE` — already past their cooldown, safe to contact
+2. `pipeline_stage_for_rule IN ('never_reached', 'smartlead_only', 'positive_reply')` — new campaign targets only; never re-engage `has_deal`, `demo`, `proposal`, `verbal_commit`, `closed_won`, or `churned` in new campaigns
+
+```sql
+SELECT
+  email,
+  first_name,
+  last_name,
+  domain,
+  company_name,
+  pipeline_stage_for_rule,
+  days_since_last_contact,
+  earliest_eligible_date
+FROM `tenant-recruitin-1575995920662.MARKETSEGMENTDATA.CRE_FORECASTING_V1`
+WHERE can_reenroll = TRUE
+  AND pipeline_stage_for_rule IN ('never_reached', 'smartlead_only', 'positive_reply')
+ORDER BY domain, days_since_last_contact DESC
+```
+
+**Cooldown reference (what's baked into `can_reenroll`):**
+| Stage | Cooldown |
+|---|---|
+| `never_reached` | Always eligible |
+| `smartlead_only` | 60 days since last contact |
+| `positive_reply` | 60 days since last reply/contact |
+| Big CRE firms (jll.com, cbre.com, etc.) | 30 days regardless of stage |
+
+**One contact per company (default):**
+- After the query, deduplicate to **1 contact per domain**. Pick the contact with the highest `days_since_last_contact` (longest rested). If it's `never_reached`, pick any.
+- Only include a second contact per domain if the campaign needs more volume and the first pass leaves you short. Never enroll 3+ from the same domain unless explicitly requested.
+
+**Bi-weekly cadence — standard operating model for CRE:**
+Every two weeks, pull a fresh batch of ~5,400 contacts and split into two campaigns:
+- **Campaign A** — 2,700 contacts, enroll Sunday night → Email 1 lands Monday
+- **Campaign B** — 2,700 contacts, enroll the following Sunday night → Email 1 lands the next Monday
+
+Name them accordingly:
+- `SLG - CRE - Email - {Approach} - {CTA} - v{N}a` (Week 1)
+- `SLG - CRE - Email - {Approach} - {CTA} - v{N}b` (Week 2)
+
+When starting a new CRE campaign, always ask the user:
+> "Is this a new bi-weekly batch? If so, I'll split the ~5,400 contacts into two 2,700-contact campaigns
+> (Week 1 and Week 2). Should I proceed with that split?"
+
+If the batch is smaller than expected after verification/dedup, split evenly and flag the yield shortfall.
+
+Save output to `/tmp/cre_{date}_bq_raw.json`.
+After splitting, save as `/tmp/cre_{date}_A_bq_raw.json` and `/tmp/cre_{date}_B_bq_raw.json`.
+
+### Step CRE-1 — Email deliverability check (BillionVerify)
+Run BillionVerify even though these emails came from SmartLead/HubSpot — emails go stale.
 ```bash
-python verify_emails.py --file /tmp/{segment}_raw.csv --out /tmp/{segment}_verified.json
+python verify_emails.py --file /tmp/cre_{date}_bq_raw.json --out /tmp/cre_{date}_verified.json
 ```
 Remove undeliverable contacts. Proceed with verified contacts only.
 
@@ -119,7 +184,7 @@ Before generating copy, ask the user:
 **Default: run unless user explicitly says no.**
 
 ```bash
-python listing_enrich.py --file /tmp/{segment}_verified.json --out /tmp/{segment}_enriched.json
+python listing_enrich.py --file /tmp/cre_{date}_verified.json --out /tmp/cre_{date}_enriched.json
 ```
 
 - Searches LoopNet, Crexi, and broker websites for each rep's current active listing
@@ -135,6 +200,50 @@ Follow Phase 5 as normal, using CRE-specific templates and CTAs:
 - Email 1: personalized to the broker's listing (if enriched) — address, type, size
 - Email 2: follow-up referencing listing data, reply-based CTA
 - Email 3: new subject/trigger, brief last touch (see Email 3 warning in Phase 5)
+
+---
+
+### CRE TIMING & SEASONAL GUIDANCE
+
+> **Note:** Weekly cadence guidance is consistent with general B2B outreach research. Seasonal windows
+> align with known CRE retail leasing cycles. Neither has been validated against our own send data yet —
+> treat as directional, not benchmarks. Worth A/B testing when volume allows.
+
+#### Weekly cadence — enroll so Email 1 lands Monday or Tuesday
+
+CRE brokers follow a predictable weekly rhythm:
+
+| Day(s) | Broker Mode | Use for |
+|---|---|---|
+| Mon–Tue (8–10am NY) | Reviewing pipeline, planning week | **Email 1** — best window |
+| Wednesday | Operational focus | Acceptable but not ideal for Email 1 |
+| Thu–Fri | Week-closing mode | **Email 2** lands here naturally (3-day gap) |
+
+**Practical rule:** Enroll new contacts Sunday night or Monday morning so Email 1 hits Monday/Tuesday.
+Email 2 (Day +3) then lands Thursday/Friday — fine for a follow-up, not ideal for a first impression.
+This costs nothing — it's just enrollment scheduling.
+
+#### Seasonal windows — check the calendar before launching
+
+Always check the current month before building a CRE campaign. Adjust copy framing accordingly:
+
+| Period | CRE Cycle | Outreach Strategy | Copy angle |
+|---|---|---|---|
+| **Jan–Mar** | Q1 pipeline build | Good window — brokers setting H1 targets | "Q1 leasing" framing |
+| **Apr–Jun** | Peak retail leasing season (H2 openings) | **Best window of the year** | Urgency around H2 tenant placement |
+| **Jul** | Pre-summer slowdown | Compensate with volume, not frequency | Keep it brief, lower expectations |
+| **Aug–Sep** | Q3 ramp-up | Second best window | "Back from summer" energy — fresh pipeline |
+| **Oct–Nov** | Q4 push / year-end deals | Moderate — focus on quick wins | Year-end urgency framing |
+| **Dec** | Holiday slowdown | Avoid or very low volume | Hold for January |
+
+**How to use this in copy:**
+- Apr–Jun: "Are you filling any spaces for H2 openings?" or "Q2 is usually when tenants start moving — are you sourcing for any retail space?"
+- Aug–Sep: "Coming off summer — are you actively leasing any retail right now?"
+- Jan–Mar: "Starting Q1 outreach — are you working on any retail spaces this quarter?"
+- Jul / Dec: No seasonal hook — use the standard generic inquiry format (e.g. `"retail tenant question"`)
+
+Do NOT use seasonal framing if it sounds forced. The generic inquiry subject lines are proven at scale
+and are always the safe fallback.
 
 ---
 
@@ -922,9 +1031,81 @@ If no dedicated script exists for the campaign type, apply the above rules manua
 
 ---
 
-## PHASE 5C — Campaign Document (Create Before Phase 6)
+## PHASE 5C — Save Full Lead+Copy Table to BigQuery (MANDATORY — Before Drive Doc)
 
-**Trigger:** Leads are enriched + verified, copy is generated, 3-pass QA is done, and BigQuery table is populated.
+**This step is required before creating the campaign doc and before touching SmartLead.**
+The BQ table is the source of truth for every campaign. It must exist so the user can query and validate copy before anything goes live.
+
+### Table naming
+```
+{segment_slug}_{YYYYMMDD}_v{n}
+```
+Examples: `pest_control_20260408_v1`, `pest_control_clay_20260408_v1`, `hvac_20260403_v1`
+
+For Clay-sourced campaigns, append `_clay` to the segment slug: `pest_control_clay_20260408_v1`
+For Apollo-sourced campaigns: `pest_control_20260408_v1`
+
+Dataset: `PLG_OUTBOUND` for PLG campaigns, `SLG_OUTBOUND` for CRE/BB.
+
+### Required schema (minimum — add extra fields if you have them)
+```
+apollo_id           STRING    — Apollo person ID (null for Clay contacts)
+first_name          STRING
+last_name           STRING
+email               STRING
+title               STRING
+city                STRING    — raw city from source
+state               STRING
+linkedin_url        STRING
+company_name        STRING
+company_domain      STRING
+segment             STRING    — e.g. pest_control, hvac, catering
+source              STRING    — apollo | clay | list
+campaign_name       STRING    — full SmartLead campaign name
+smartlead_campaign_id INT64   — null until campaign is created; update after Step 6A
+city_resolved       STRING    — city used in copy (fallback: 'your area')
+smb_count           INT64     — BQ business count used in copy (null = fallback used)
+email_verified      BOOL      — BillionVerify is_deliverable
+verification_status STRING    — BillionVerify status field
+ab_variant          INT64     — 0, 1, or 2 (inferred from Email1 opener)
+subject1            STRING
+subject3            STRING
+email1              STRING    — plain text, \n line breaks (NOT converted to <br> here)
+email2              STRING
+email3              STRING
+enrolled_at         TIMESTAMP — set when leads are loaded to SmartLead
+created_at          TIMESTAMP — set when this row is written
+```
+
+### How to write it
+```python
+from google.cloud import bigquery
+bq = bigquery.Client(project='tenant-recruitin-1575995920662')
+TABLE = 'tenant-recruitin-1575995920662.PLG_OUTBOUND.{table_name}'
+# Create table with schema, then:
+job = bq.load_table_from_json(rows, TABLE,
+    job_config=bigquery.LoadJobConfig(schema=SCHEMA, write_disposition='WRITE_TRUNCATE'))
+job.result()
+```
+
+### After writing
+Tell the user:
+> "BQ table `{table_name}` is ready in PLG_OUTBOUND — {N} rows. You can query it to validate copy before I set up SmartLead."
+
+**Do not proceed to Phase 5C (Drive doc) or Phase 6 until user confirms.**
+
+⚠️ **If `smartlead_campaign_id` is not yet known** (campaign not created yet): write the table with `NULL` for that field, then run an UPDATE after Step 6A:
+```sql
+UPDATE `tenant-recruitin-1575995920662.PLG_OUTBOUND.{table_name}`
+SET smartlead_campaign_id = {id}
+WHERE smartlead_campaign_id IS NULL
+```
+
+---
+
+## PHASE 5D — Campaign Document (Create After BQ Table Is Confirmed)
+
+**Trigger:** BQ table written, user has confirmed it looks correct.
 **Do this before touching SmartLead.** User must validate the doc before campaign setup begins.
 
 ### What to include

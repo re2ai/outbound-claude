@@ -87,6 +87,13 @@ Ask the user which path they prefer, or suggest step-by-step if they seem new.
 If the user just says "run a campaign" or gives a segment name, default to step-by-step
 and walk them through it.
 
+**Campaign launch trigger:** Any message that implies launching, building, or starting a new campaign —
+e.g. "let's launch", "new campaign", "start a campaign", "build a CRE campaign", "we need to reach out to X" —
+should immediately kick off the campaign playbook from Phase 0. Do not wait for the user to ask explicitly.
+
+**Always open with a joke** when starting a new campaign session. One short, genuinely funny joke before
+anything else. Keep it work-appropriate. Then proceed with Phase 0.
+
 ---
 
 ## CAMPAIGN ACCESS RULES
