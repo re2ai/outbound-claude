@@ -126,6 +126,16 @@ SEGMENTS = {
         "default_smb_guess": "commercial buildings",
         "subject_template": "do you do HVAC for {smb_type} in {city}?",
     },
+    "pest_control": {
+        "mode": "web_enrich",
+        "framing": "recurrent_varied",
+        "segment_label": "pest control",
+        "default_service": "commercial pest control",
+        "default_smb_type": "restaurants and offices",
+        "default_smb_guess": "restaurants and offices",
+        "subject_template": "pest control for {city} businesses?",
+        "subject3_template": "pest control contacts in {city}",
+    },
 
     # ── Decision-tree mode segments ────────────────────────────────────────────
     # GPT writes ONE opening question. Python assembles rest.
@@ -147,6 +157,100 @@ Rules:
 - Must be a question. Output the question only, nothing else.""",
     },
 }
+
+
+# ── Variant helpers (recurrent_varied mode) ───────────────────────────────────
+
+def get_variant(contact):
+    """Deterministic variant index 0/1/2 based on contact email hash."""
+    return hash(contact.get("email", "")) % 3
+
+
+def build_email1_recurrent_varied(contact, cfg, variant):
+    first_name    = (contact.get("first_name") or "").strip()
+    company       = (contact.get("company") or contact.get("company_name") or "your company").strip()
+    service       = (contact.get("service")    or cfg["default_service"]).strip()
+    smb_type      = (contact.get("smb_type")   or cfg["default_smb_type"]).strip()
+    city          = (contact.get("city")       or "your area").strip()
+    smb_count_raw = contact.get("smb_count")
+
+    greeting = f"Hi {first_name}," if first_name else "Hi,"
+
+    openers = [
+        f"Do you do {service} for {smb_type} in {city}?",
+        f"Does {company} handle {service} for {smb_type} in {city}?",
+        f"Are you taking on new {service} accounts in {city}?",
+    ]
+
+    if smb_count_raw:
+        count_line = (
+            f"There are {smb_count_raw} businesses in {city} that always need services like yours "
+            f"and I can get you direct contact with them.\n\n"
+        )
+    else:
+        count_line = (
+            f"There are many small businesses in {city} that always need services like yours "
+            f"and I can get you direct contact with them.\n\n"
+        )
+
+    return (
+        f"{greeting}\n\n"
+        f"{openers[variant]}\n\n"
+        f"{count_line}"
+        f"Reply and I'll send you access to test it for free -- no card needed."
+    )
+
+
+def build_email2_varied(contact, variant):
+    city          = (contact.get("city")    or "your area").strip()
+    company       = (contact.get("company") or contact.get("company_name") or "your company").strip()
+    smb_count_raw = contact.get("smb_count")
+
+    openers = [
+        f"I ran a quick search in {city} this morning thinking on {company}.",
+        f"Was looking at {city} businesses this morning and thought of {company}.",
+        f"Pulled some data on {city} this morning thinking on how to get {company} more customers.",
+    ]
+
+    count_line = (
+        f"Got {smb_count_raw} businesses in {city} that look like they could use your services.\n\n"
+        if smb_count_raw else ""
+    )
+
+    return (
+        f"{openers[variant]}\n\n"
+        f"{count_line}"
+        f"Just reply and I'll send you access to test it for free -- no card needed."
+    )
+
+
+def build_email3_varied(contact, variant):
+    city          = (contact.get("city") or "your area").strip()
+    smb_count_raw = contact.get("smb_count")
+
+    if variant == 2:
+        if smb_count_raw:
+            opener = (
+                f"Maybe the timing is not ideal, but I still have {smb_count_raw} contacts "
+                f"that could easily get into your pipeline."
+            )
+        else:
+            opener = (
+                "Maybe the timing is not ideal, but I still have many contacts "
+                "that could easily get into your pipeline."
+            )
+    else:
+        openers = [
+            "Maybe my timing was bad and you're not looking to grow your revenue right now.",
+            "Figured out maybe at current time you're not into getting more customers.",
+        ]
+        opener = openers[variant]
+
+    return (
+        f"{opener}\n\n"
+        f"All the local business data for {city} is ready whenever you want to test it.\n\n"
+        f"Just reply and I'll send over the access."
+    )
 
 
 # ── GPT call (decision-tree mode only) ────────────────────────────────────────
@@ -314,6 +418,23 @@ def build_email3(contact):
 # ── Worker ─────────────────────────────────────────────────────────────────────
 
 def process_contact(contact, cfg):
+    if cfg["mode"] == "web_enrich" and cfg.get("framing") == "recurrent_varied":
+        variant = get_variant(contact)
+        city    = (contact.get("city") or "your area").strip()
+        email1  = build_email1_recurrent_varied(contact, cfg, variant)
+        email2  = build_email2_varied(contact, variant)
+        email3  = build_email3_varied(contact, variant)
+        result  = {
+            **contact,
+            "Subject1": build_subject(contact, cfg),
+            "Email1":   email1,
+            "Email2":   email2,
+            "Email3":   email3,
+        }
+        if "subject3_template" in cfg:
+            result["Subject3"] = cfg["subject3_template"].format(city=city)
+        return result
+
     if cfg["mode"] == "web_enrich":
         email1 = build_email1_web_enrich(contact, cfg)
     else:
@@ -334,7 +455,7 @@ def process_contact(contact, cfg):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--file",    required=True)
-    parser.add_argument("--segment", required=True, choices=list(SEGMENTS.keys()))
+    parser.add_argument("--segment", required=True, choices=sorted(SEGMENTS.keys()))
     parser.add_argument("--out",     required=True)
     args = parser.parse_args()
 

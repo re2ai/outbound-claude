@@ -206,6 +206,38 @@ Track every search: filters used, TAM discovered, how many enriched, how many re
 
 ---
 
+## Pest Control — 2026-04-07
+
+### Search v1 (CURRENT)
+**Keywords**: `pest control` (2,071), `exterminator` (15 new), `pest management` (356 new), `pest control company` (2 new), `termite control` (35 new), `fumigation` (7 new), `rodent control` (4 new), `bed bug` (26 new)
+**Filters**:
+- person_titles: owner, founder, president, CEO, managing director, principal, operator
+- organization_num_employees_ranges: 1,50
+- organization_locations: United States
+- has_email: true (free api_search flag)
+
+**Excluded brands**: Terminix, Orkin, Rollins, Rentokil, ServiceMaster, Ehrlich, Arrow Exterminators, Western Exterminator, Anticimex, Massey Services, Cook's Pest
+
+**TAM**: ~2,516 unique candidates
+**Candidates pulled (api_search, free)**: 2,516 → `~/Documents/pest_control_candidates.json`
+**Post-dedup net new**: 1,097 (removed 3 exact HubSpot email matches; 37 pest control contacts found in HubSpot)
+**Enriched via people/match**: 1,100 contacts with email (yield ~100% on has_email pool)
+**Credits used**: ~1,103 Apollo credits
+**BillionVerify**: running → `~/Documents/pest_control_verified.json`
+**Saved to**: `~/Documents/pest_control_enriched.json` → deduped: `~/Documents/pest_control_deduped.json`
+**Status**: VERIFYING — awaiting BillionVerify results
+
+**Next keywords to try**: exhausted primary — `pest control company`, `termite`, `fumigation`, `rodent control`, `bed bug` all yielded minimal new contacts
+
+**Campaign**: PLG - Pest Control - Email - DataDriven - Access - v1 (ID: 3146660) — **LAUNCHED 2026-04-08**
+- 666 leads active (671 loaded, 5 on global block list)
+- 19 inboxes: harold x4, erik x4, griffin x1, paul x1, tyler x4, leonardo x4, olivia x1
+- max_leads_per_day: 150 | Mon-Fri 9am-7pm ET
+- Copy: recurrent_varied framing, 3 deterministic variants per contact (hash % 3)
+- BQ: 666 enrollment rows in PLG_OUTBOUND.PLG_CAMPAIGN_ENROLLMENTS
+
+---
+
 ## HVAC — 2026-04-02
 
 ### Search v1 (Apollo — CURRENT)
