@@ -28,7 +28,7 @@ Also run through this checklist. Do not skip. Do not assume steps were done in a
 
 ```
 □ Leads enriched and verified (BillionVerify done, deliverables-only)
-□ Copy generated for all leads (no empty Email1/Email2/Email3 fields)
+□ Copy generated for all leads (no empty Email1/Email2 fields)
 □ 3-pass copy QA completed (Phase 5B) — user signed off
 □ Full lead+copy BQ table written (Phase 5C) — user confirmed before proceeding
 □ Campaign doc created in Drive and validated by user (Phase 5D)
@@ -39,8 +39,6 @@ Also run through this checklist. Do not skip. Do not assume steps were done in a
 
 If any box is unchecked, complete it before moving on.
 This rule applies even if the user changes the subject — finish the open phase first, or explicitly confirm with the user to park it.
-
----
 
 ---
 
@@ -247,15 +245,30 @@ If user skips enrichment, proceed with `_verified.json` as the copy gen input.
 Follow Phase 5 as normal, using CRE-specific templates and CTAs:
 - Email 1: personalized to the broker's listing (if enriched) — address, type, size
 - Email 2: follow-up referencing listing data, reply-based CTA
-- Email 3: new subject/trigger, brief last touch (see Email 3 warning in Phase 5)
+
+### Step CRE-4 — BigQuery sync (SLG tables, not PLG)
+After loading leads, sync to the **SLG** dataset — NOT PLG_OUTBOUND:
+```bash
+python bq_sync.py contacts \
+  --file /tmp/{segment}_enriched.json \
+  --segment {segment} \
+  --dataset SLG_OUTBOUND
+
+python bq_sync.py enroll \
+  --campaign-id {id} \
+  --campaign-name "SLG - CRE - Email - HyperPersonal - Demo - v1" \
+  --segment {segment} \
+  --dataset SLG_OUTBOUND
+```
+Tables: `SLG_OUTBOUND.SLG_CONTACTS`, `SLG_OUTBOUND.SLG_CAMPAIGN_ENROLLMENTS`
 
 ---
 
 ### CRE TIMING & SEASONAL GUIDANCE
 
 > **Note:** Weekly cadence guidance is consistent with general B2B outreach research. Seasonal windows
-> align with known CRE retail leasing cycles. Neither has been validated against our own send data yet —
-> treat as directional, not benchmarks. Worth A/B testing when volume allows.
+> align with known CRE retail leasing cycles and industry event calendars. Not yet validated against
+> our own send data — treat as directional. Worth A/B testing when volume allows.
 
 #### Weekly cadence — enroll so Email 1 lands Monday or Tuesday
 
@@ -277,18 +290,47 @@ Always check the current month before building a CRE campaign. Adjust copy frami
 
 | Period | CRE Cycle | Outreach Strategy | Copy angle |
 |---|---|---|---|
-| **Jan–Mar** | Q1 pipeline build | Good window — brokers setting H1 targets | "Q1 leasing" framing |
-| **Apr–Jun** | Peak retail leasing season (H2 openings) | **Best window of the year** | Urgency around H2 tenant placement |
-| **Jul** | Pre-summer slowdown | Compensate with volume, not frequency | Keep it brief, lower expectations |
-| **Aug–Sep** | Q3 ramp-up | Second best window | "Back from summer" energy — fresh pipeline |
-| **Oct–Nov** | Q4 push / year-end deals | Moderate — focus on quick wins | Year-end urgency framing |
-| **Dec** | Holiday slowdown | Avoid or very low volume | Hold for January |
+| **Jan–Mar** | Q1 pipeline build, budget cycles reset | Strong window — brokers setting H1 targets | "Q1 leasing" / "new year, new tenants" framing |
+| **Apr–May** | Peak retail leasing season — ICSC RECon window | **Best window of the year** | H2 openings urgency; ICSC energy if timed right |
+| **Jun** | Lease signing push before summer | Good — brokers closing deals before July | "before summer" framing |
+| **Jul** | Summer slowdown | Reduce frequency, maintain volume | Generic inquiry only — no seasonal hook |
+| **Aug–Sep** | Q3 ramp-up, back-to-school retail push | Second best window — fresh pipeline energy | "Coming off summer" / "fall openings" framing |
+| **Oct–Nov** | Q4 push, holiday pop-up season | Moderate — short-term leases and year-end deals | Year-end urgency; mention pop-up/short-term opportunities |
+| **Dec** | Holiday close-out, slowdown | Avoid or very low volume | Hold for January |
+
+#### ICSC RECon — the biggest retail real estate event of the year
+
+ICSC RECon (International Council of Shopping Centers) is typically held in **late May** in Las Vegas. This is when major landlords, brands, and brokers make leasing decisions for the next 12 months.
+
+**How to use this:**
+- **2–4 weeks before RECon (late April–early May):** This is peak outreach season. Brokers are actively sourcing tenants and qualifying leads before the conference. "Are you heading to RECon?" is a natural opener and conversation starter.
+- **During RECon:** Pause or reduce sends — inbox engagement drops dramatically while brokers are at the conference.
+- **2 weeks after RECon (early June):** Re-engage with "following up from the show" framing — even if you didn't attend.
+- ICSC also holds regional events throughout the year (check icsc.com for current calendar). Smaller but same pattern: pre-event peak, during-event pause.
+
+#### Lease expiry patterns — when tenants are most active
+
+Retail leases commonly expire mid-year (June–July) or at year-end (December–January), based on standard 5/10-year terms. This means:
+- **Q1 (Jan–Mar):** Brokers are beginning outreach for leases expiring mid-year — **good sourcing window for new tenant inquiries**
+- **Q3 (Jul–Sep):** Brokers finalizing leases for year-end openings — back-to-school and holiday retail rush
+- **Oct–Nov:** Holiday pop-up leases (1–3 month terms for seasonal retail) — mention short-term opportunities in copy
+
+#### Tenant type seasonality
+
+| Tenant type | Peak leasing activity | Copy angle |
+|---|---|---|
+| **Food & Beverage** | Year-round, but heavier Q1/Q2 | General inquiry, or "summer opening" framing |
+| **Fitness / Wellness** | Jan (new year) and Sep (back to school) | "January rush" or "fall enrollment" hooks |
+| **Specialty retail** | Q2 (spring launches) and Q4 (holiday) | Timing-specific subject lines |
+| **Pop-up / seasonal** | Sep–Oct for holiday pop-ups | "Short-term space" framing |
+| **Medical / dental** | Steady — less seasonal | No seasonal hook needed |
 
 **How to use this in copy:**
-- Apr–Jun: "Are you filling any spaces for H2 openings?" or "Q2 is usually when tenants start moving — are you sourcing for any retail space?"
+- Apr–May: "Are you filling any spaces for H2 openings?" or "Heading to RECon this year?"
 - Aug–Sep: "Coming off summer — are you actively leasing any retail right now?"
-- Jan–Mar: "Starting Q1 outreach — are you working on any retail spaces this quarter?"
-- Jul / Dec: No seasonal hook — use the standard generic inquiry format (e.g. `"retail tenant question"`)
+- Jan–Mar: "Starting Q1 — are you working on any retail spaces this quarter?"
+- Oct–Nov: "Are you leasing any short-term space for the holiday season?"
+- Jul / Dec: No seasonal hook — use the standard generic inquiry format (`"retail tenant question"`)
 
 Do NOT use seasonal framing if it sounds forced. The generic inquiry subject lines are proven at scale
 and are always the safe fallback.
@@ -300,7 +342,7 @@ and are always the safe fallback.
 **What the numbers show:**
 - Best CRE Email 1: **2.37% positive rate** (69K sent)
 - Best CRE Email 2: **2.73% positive rate** (64K sent) — Email 2 outperforms Email 1 for CRE
-- Email 3: **0.09% positive rate** across all segments — effectively dead weight
+- Email 3: **0.09% positive rate** across all segments — removed from default sequence
 
 #### CRE — Subject Lines That Win
 
@@ -390,6 +432,64 @@ Are you looking for a national or local tenant? If you are looking for a local o
 
 ---
 
+## BB CAMPAIGN — SPECIFIC RULES
+
+BB campaigns diverge from PLG in the same way CRE does. Read this before starting any BB campaign.
+
+### Input source
+BB leads come from a **CSV export from BizBuySell or Focal5**. There is no BQ table equivalent to CRE_FORECASTING_V1 for BB — the raw data is pulled manually from the broker listing platforms.
+
+**Skip Phases 1–4 entirely** (no Apollo search, no Apollo enrichment, no dedup against Apollo tables).
+
+### Step BB-0 — Get the CSV from BizBuySell or Focal5
+
+1. **Log in to BizBuySell** (bizbuysell.com) or **Focal5** and export a list of active business brokers.
+   - Filter by geography if targeting a specific market.
+   - Export fields: broker name, email, company, city, state, listings/niche if available.
+2. **Check for listing data** — if the export includes listing details (business type, city, asking price), flag it. This enables the HyperPersonal copy variant (see BB COPY INTELLIGENCE below).
+3. **Save as:** `/tmp/bb_{date}_raw.csv`
+4. **Convert to JSON** and normalize field names to match the standard contact schema:
+   ```python
+   # Expected output fields: first_name, last_name, email, company_name, city, state, business_type (if available)
+   ```
+5. **Deduplicate against existing BB campaigns in BQ:**
+   ```sql
+   SELECT DISTINCT SPLIT(email, '@')[OFFSET(1)] as domain
+   FROM `tenant-recruitin-1575995920662.SLG_OUTBOUND.SLG_CAMPAIGN_ENROLLMENTS`
+   WHERE LOWER(smartlead_campaign_name) LIKE '%business broker%'
+      OR LOWER(smartlead_campaign_name) LIKE '%slg - bb%'
+   ```
+   Exclude any broker whose domain already appears in SLG enrollments within the last 60 days.
+6. Save deduplicated output as `/tmp/bb_{date}_deduped.json` and confirm count with user before continuing.
+
+### Step BB-1 — Email deliverability check (BillionVerify)
+```bash
+python verify_emails.py --file /tmp/bb_{date}_deduped.json --out /tmp/bb_{date}_verified.json
+```
+Remove undeliverable contacts. Proceed with verified contacts only.
+
+### Step BB-2 — Copy generation
+Follow Phase 5 as normal, using BB-specific templates and CTAs (see BB COPY INTELLIGENCE below).
+- Email 1: personalized to the broker's business type niche if available; generic otherwise
+- Email 2: pure callback, same offer, same frame (do not introduce new angles)
+
+### Step BB-3 — BigQuery sync (SLG tables)
+After loading leads, sync to the **SLG** dataset:
+```bash
+python bq_sync.py contacts \
+  --file /tmp/bb_{date}_verified.json \
+  --segment business_brokers \
+  --dataset SLG_OUTBOUND
+
+python bq_sync.py enroll \
+  --campaign-id {id} \
+  --campaign-name "SLG - Business Brokers - Email - ProblemFirst - Connect - v1" \
+  --segment business_brokers \
+  --dataset SLG_OUTBOUND
+```
+
+---
+
 ### BB COPY INTELLIGENCE (data-backed, 16K emails analyzed)
 
 **What the numbers show:**
@@ -463,7 +563,7 @@ Pure callback. Same offer, same frame, no new pitch. This is intentional — con
 **Benchmarks:**
 - PLG Email 1: **0.54% positive rate** (vs CRE 2.37%, BB 2.71%) — ~5x gap driven by framing, not just volume
 - PLG Email 2: **0.28% positive rate** — follow-up barely moves the needle with current copy
-- Email 3: **0.09% positive rate** — effectively dead weight across all segments (see Email 3 warning)
+- Email 3: **0.09% positive rate** — removed from default sequence
 
 **Root cause of PLG underperformance vs CRE/BB:**
 CRE/BB subjects reference THE PROSPECT'S ASSET (their listing, their niche). PLG subjects previously referenced OUR PRODUCT ("managed IT x local offices"). CRE/BB opens with a concrete real-world hook. PLG opened with a platform description. The fix: make PLG copy feel like CRE/BB — reference the prospect's market, frame the data as something they can test live, and let the reply → free trial flow do the closing.
@@ -572,24 +672,6 @@ Keep it short. No new pitch. The "access link" mention + "no card needed" is the
 
 ---
 
-### Step CRE-4 — BigQuery sync (SLG tables, not PLG)
-After loading leads, sync to the **SLG** dataset — NOT PLG_OUTBOUND:
-```bash
-python bq_sync.py contacts \
-  --file /tmp/{segment}_enriched.json \
-  --segment {segment} \
-  --dataset SLG_OUTBOUND
-
-python bq_sync.py enroll \
-  --campaign-id {id} \
-  --campaign-name "SLG - CRE - Email - HyperPersonal - Demo - v1" \
-  --segment {segment} \
-  --dataset SLG_OUTBOUND
-```
-Tables: `SLG_OUTBOUND.SLG_CONTACTS`, `SLG_OUTBOUND.SLG_CAMPAIGN_ENROLLMENTS`
-
----
-
 ## PHASE 1 — Build the Apollo List
 
 ### Step 1A — Free discovery (no credits)
@@ -638,32 +720,92 @@ Apply these filters to free api_search results BEFORE spending enrichment credit
 ## PHASE 2 — Deduplication (Before Enriching)
 
 Run dedup BEFORE enrichment to avoid wasting credits on people we've already contacted.
+BQ is the source of truth — always use BQ enrollment tables, not the SmartLead API.
 
-### Check 1 — SmartLead history
-Pull all existing campaign leads and compare Apollo IDs or emails:
+**Cooldown tiers (SmartLead only — apply in order):**
+- **Default:** 180 days
+- **Fallback if volume is too low:** 60 days (same as CRE/BB stage cooldown)
+- Always show the user the count at each tier before deciding which to use
+
+### Check 1 — SmartLead history (via BQ)
 
 ```python
-# Get all leads from all PLG campaigns
-# Compare by email domain OR apollo_id
-# Flag anyone whose company domain already appears in SmartLead
-# Strategy: same company = usually skip, but can target different person if first contact was 6+ months ago
+from google.cloud import bigquery
+import json
+
+bq = bigquery.Client(project='tenant-recruitin-1575995920662')
+
+def get_contacted_domains(cooldown_days):
+    rows = bq.query(f"""
+        SELECT DISTINCT SPLIT(email, '@')[OFFSET(1)] AS domain
+        FROM `tenant-recruitin-1575995920662.PLG_OUTBOUND.PLG_CAMPAIGN_ENROLLMENTS`
+        WHERE enrolled_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {cooldown_days} DAY)
+        UNION DISTINCT
+        SELECT DISTINCT SPLIT(email, '@')[OFFSET(1)] AS domain
+        FROM `tenant-recruitin-1575995920662.SLG_OUTBOUND.SLG_CAMPAIGN_ENROLLMENTS`
+        WHERE enrolled_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {cooldown_days} DAY)
+    """).result()
+    return {row.domain for row in rows if row.domain}
+
+total = len(candidates)
+
+# --- Tier 1: 180-day cooldown (default) ---
+contacted_180 = get_contacted_domains(180)
+net_180 = [c for c in candidates if c.get('domain') not in contacted_180]
+print(f"180-day cooldown → {len(net_180)} net new (removed {total - len(net_180)})")
+
+# --- Tier 2: 60-day fallback (only use if 180-day yield is too low) ---
+contacted_60 = get_contacted_domains(60)
+net_60 = [c for c in candidates if c.get('domain') not in contacted_60]
+print(f"60-day fallback  → {len(net_60)} net new (removed {total - len(net_60)})")
+
+# Ask user which to use before proceeding
+# Default: use 180-day list unless user confirms fallback
+candidates = net_180  # replace with net_60 if user approves fallback
+removed_smartlead = total - len(candidates)
 ```
+
+Always show both counts to the user and ask: *"180-day window gives us X contacts. Want to use that, or fall back to the 60-day window for Y contacts?"* Do not silently switch tiers.
 
 ### Check 2 — HubSpot domain check
-Pull all HubSpot contacts/deals and extract domains. Exclude any Apollo candidate whose
-organization domain matches a HubSpot deal (don't cold email active deals or customers):
+
+Exclude **all** HubSpot contacts regardless of deal stage — if they're in HubSpot, someone on the team has already touched them:
 
 ```python
-# Query: airbyte_prod.hubspot_contacts for existing emails/domains
-# Exclude: any domain matching an existing HubSpot deal or customer
-# Keep: companies with no HubSpot record at all
+rows = bq.query("""
+    SELECT DISTINCT REGEXP_EXTRACT(LOWER(email), r'@(.+)$') AS domain
+    FROM `tenant-recruitin-1575995920662.airbyte_prod.hubspot_contacts`
+    WHERE email IS NOT NULL
+""").result()
+
+hubspot_domains = {row.domain for row in rows if row.domain}
+
+before = len(candidates)
+candidates = [c for c in candidates if c.get('domain') not in hubspot_domains]
+removed_hubspot = before - len(candidates)
+print(f"Removed {removed_hubspot} HubSpot domains")
 ```
 
-Save deduplicated candidate list with a clear count:
-- Total candidates from api_search
-- Removed (already in SmartLead)
-- Removed (in HubSpot as deal/customer)
-- **Net new: X contacts available to enrich**
+⚠️ Verify the table name against the actual Airbyte schema before running:
+```sql
+SELECT table_name FROM `tenant-recruitin-1575995920662.airbyte_prod.INFORMATION_SCHEMA.TABLES`
+WHERE table_name LIKE '%hubspot%contact%'
+```
+
+### Output summary
+
+```python
+print(f"""
+Dedup complete:
+  Total from Apollo:        {total}
+  Removed (SmartLead):      {removed_smartlead}
+  Removed (HubSpot):        {removed_hubspot}
+  Net new to enrich:        {len(candidates)}
+""")
+
+with open('/tmp/{segment}_deduped.json', 'w') as f:
+    json.dump(candidates, f)
+```
 
 ---
 
@@ -766,6 +908,7 @@ it will trigger HTML rendering in some email clients and destroy deliverability.
 - Plain text style — reads like a human typed it quickly
 - ONE specific vertical mentioned (not "local businesses" — say "restaurants", "retailers", "contractors")
 - NO "I hope this finds you well", no filler openers
+
 **PLG CTAs** — goal is to get them to ask for the trial link (do NOT send the link):
   - ✅ "Reply and I'll send you access to test it for free -- no card needed." (current template)
   - ✅ "Should I send you one?" (tested winner in earlier campaigns)
@@ -802,6 +945,15 @@ it will trigger HTML rendering in some email clients and destroy deliverability.
   - ❌ Generic subject lines that don't reference the business type
 
 *PLG:* See Phase 5 PLG subject line guidance below.
+
+**PLG trial link — format for manual replies when a prospect asks for access:**
+```
+https://landing.re2.ai/resquared-trial-redirect?utm_source=email&utm_medium=smartlead&utm_campaign={campaign_slug}&utm_content=email1&email={url_encoded_prospect_email}
+```
+- `utm_content`: use `email1` or `email2` depending on which email triggered the reply
+- `email`: URL-encode the prospect's email address (e.g. `john%40example.com`)
+- `campaign_slug`: the campaign name slug (e.g. `plg-it-solutions-v1`)
+- **Do NOT use the old format:** `utm_medium=link&utm_campaign=claude-v1` — deprecated
 
 ### LLM Copywriting — How to get non-garbage output
 
@@ -847,11 +999,9 @@ Decision tree:
 - Verify Email 1 is pure plain text — no HTML tags, no links of any kind
 - Spot-check 10-20 samples before generating full list
 - ALL emails stored as plain text with `\n` line breaks. Convert to `<br>` ONLY at SmartLead load time.
-- NO links or HTML in Email 2 or 3 — pure plain text, reply-based CTAs only.
+- NO links or HTML in Email 2 — pure plain text, reply-based CTAs only.
 
-**Models:** Use `gpt-5-mini` (ID: `gpt-5-mini-2025-08-07`) for bulk generation.
-Use `ThreadPoolExecutor(max_workers=8)` for parallel API calls.
-Set `max_completion_tokens: 2000` (reasoning model, uses ~900 tokens for reasoning).
+**Models:** Use the latest efficient OpenAI reasoning model for bulk generation — check `platform.openai.com/docs/models` before picking. Prefer mini/small variants for cost. Use `ThreadPoolExecutor(max_workers=8)` for parallel API calls. Set `max_completion_tokens: 2000` if using a reasoning model.
 
 ### Web Enrichment (Clay-style, for richer personalization)
 
@@ -878,8 +1028,7 @@ web search to find a real, verifiable detail about the prospect:
 python web_enrich.py --file /tmp/{segment}_verified.json --segment {segment} --out /tmp/{segment}_enriched.json
 python generate_emails.py --file /tmp/{segment}_enriched.json --segment {segment} --out /tmp/{segment}_emails.json
 ```
-Model: `o4-mini` via `POST /v1/responses` with `tools: [{"type": "web_search"}]`.
-**Never use gpt-4 family — always check latest model docs before picking a model.**
+Model: use the latest OpenAI model that supports `POST /v1/responses` with `tools: [{"type": "web_search"}]`. Check `platform.openai.com/docs/models` — look for reasoning-capable models with web search support. Prefer the smallest/cheapest that does the job well.
 Output stored in `web_detail` field. generate_emails.py uses it as opener if present, falls back to decision tree question if empty.
 
 ### Email 2 — Follow-up (plain text, no links, day +3)
@@ -951,44 +1100,13 @@ Just reply and I'll send you access to test it for free -- no card needed.
 ```
 If `smb_count` is not available for this city, omit the count line — do not substitute a placeholder.
 
-### Email 3 — Last touch (plain text, no links, day +8)
-
-> ⚠️ **DATA WARNING — Email 3 returns 0.09% positive rate across 13,944 sends (13 total positive replies).
-> This is statistically dead weight. Strongly consider running 2-email sequences only.
-> Only include Email 3 if the user explicitly requests it, and note the yield is near zero.**
-
-Email 3 is plain text, stored with `\n` line breaks. No HTML, no links.
-
-**Sequence threading:** Email 3 HAS its own subject line — a new angle/trigger. This starts a fresh thread (not a reply to Email 1), making it feel like a separate outreach rather than a third follow-up. Pick a subject that's different from Email 1's angle.
-
-**Subject line:** Different trigger from Email 1. Examples:
-- Email 1: `"do you clean restaurants in {city}?"` → Email 3: `"local restaurant contacts in {city}"`
-- Email 1: `"do you serve offices in {city}?"` → Email 3: `"MSP leads in {city}"`
-- Email 1: `"retail listings in {city}"` → Email 3: `"{city} tenant prospects"`
-
-**PLG approach** — brief, last shot, reply to get the link:
-```
-Since I'm guessing you're busy, leaving this here for when you have a moment.
-
-The data for {city} is ready on our end. Just reply and I'll send you access.
-```
-
-**CRE/BB approach** — brief, low pressure, invite reply:
-```
-Last note from me — if timing isn't right, no worries at all.
-
-If you'd ever want to see how we can help with {city} leads, just reply and we can find 5 minutes.
-```
-
 ### Custom fields for SmartLead leads
-All campaigns (PLG, CRE, BB) use 4 custom fields per lead:
+All campaigns (PLG, CRE, BB) use 3 custom fields per lead:
 - `Subject1` — Email 1 subject (personalized per lead)
-- `Subject3` — Email 3 subject (new trigger, different angle from Subject1) — CRE/BB also use this
 - `Email1` — full Email 1 body (**plain text stored with `\n`, converted to `<br>` at load time**)
 - `Email2` — full Email 2 body (**plain text stored with `\n`, converted to `<br>` at load time**)
-- `Email3` — full Email 3 body (**plain text stored with `\n`, converted to `<br>` at load time**)
 
-**CRITICAL:** NO email (1, 2, or 3) may contain `<a href>`, `<img>`, or any HTML of any kind.
+**CRITICAL:** NO email (1 or 2) may contain `<a href>`, `<img>`, or any HTML of any kind.
 ALL bodies are stored as plain text with `\n` and converted to `<br>` ONLY at SmartLead load time.
 This is universal across PLG, CRE, and BB. HTML in emails triggers rendering issues and spam filters.
 
@@ -1015,18 +1133,17 @@ After 3 passes, proceed to Phase 6 regardless of minor remaining issues (user ha
 
 These rules apply unless the user explicitly says to skip a specific rule for this campaign.
 
-For CRE campaigns, apply to all body fields: `Email1`, `Email1a`, `Email1b`, `Email2`, `Email3`.
-For PLG/BB campaigns, apply to: `Email1`, `Email2`, `Email3`.
+For CRE campaigns, apply to all body fields: `Email1`, `Email1a`, `Email1b`, `Email2`.
+For PLG/BB campaigns, apply to: `Email1`, `Email2`.
 
 ```
 CONTENT COMPLETENESS
 □ Subject1 is present and non-empty
-□ Subject3 is present and non-empty (Email 3 needs its own subject)
-□ Email1, Email2, Email3 all present and non-empty
+□ Email1 and Email2 both present and non-empty
 □ Email1 body ≥ 80 chars (too short = not a real email)
-□ Email2/3 body ≥ 40 chars (too short = blank or placeholder only)
+□ Email2 body ≥ 40 chars (too short = blank or placeholder only)
 □ Email1 body ≤ ~400 chars / ~65 words (over-long = LLM rewrote template)
-□ Email2/3 body ≤ ~600 chars / ~100 words (keep follow-ups tight)
+□ Email2 body ≤ ~600 chars / ~100 words (keep follow-ups tight)
 
 GREETING & FIRST NAME
 □ Email1 starts with "Hi " or "Hey " (must have a greeting)
@@ -1045,15 +1162,14 @@ COPY QUALITY
 □ No em dashes (—) in any field
 □ No repeated CTAs — "just reply" / "let me know" / "open to a demo" appears max 1x per email
 □ No repetitive phrases across an email ("your listing at your listing", same sentence twice)
-□ CTA is present in Email2 and Email3 (must contain reply invitation or interest ask)
-□ Subject1 is not generic: not "subject", "subject1", "test", "n/a", "follow up", "last note"
-□ Subject3 is not generic and is meaningfully different from Subject1
+□ CTA is present in Email2 (must contain reply invitation or interest ask)
+□ Subject1 is not generic: not "subject", "subject1", "test", "n/a", "follow up"
 
 PERSONALIZATION ACCURACY
 □ No unfilled placeholders: {{...}}, [CITY], [NAME], [COMPANY], [SERVICE], [TYPE]
 □ No JSON blob leaked into copy: {"reasoning", "confidence":, "output":
-□ City is consistent across Email1/2/3 — if Email1 mentions {city}, Email2/3 use the same city
-□ Business type is consistent across Email1/2/3 — same vertical throughout
+□ City is consistent across Email1/2 — if Email1 mentions {city}, Email2 uses the same city
+□ Business type is consistent across Email1/2 — same vertical throughout
 □ If listing_address is present (CRE): no "your listing at your listing" artifacts
 □ No raw street addresses in copy (digits + street name) unless address-specific copy is intentional
 □ No "United States" — use city name only (e.g. "Austin", not "Austin, Texas, United States")
@@ -1117,10 +1233,8 @@ email_verified      BOOL      — BillionVerify is_deliverable
 verification_status STRING    — BillionVerify status field
 ab_variant          INT64     — 0, 1, or 2 (inferred from Email1 opener)
 subject1            STRING
-subject3            STRING
 email1              STRING    — plain text, \n line breaks (NOT converted to <br> here)
 email2              STRING
-email3              STRING
 enrolled_at         TIMESTAMP — set when leads are loaded to SmartLead
 created_at          TIMESTAMP — set when this row is written
 ```
@@ -1140,7 +1254,7 @@ job.result()
 Tell the user:
 > "BQ table `{table_name}` is ready in PLG_OUTBOUND — {N} rows. You can query it to validate copy before I set up SmartLead."
 
-**Do not proceed to Phase 5C (Drive doc) or Phase 6 until user confirms.**
+**Do not proceed to Phase 5D (Drive doc) or Phase 6 until user confirms.**
 
 ⚠️ **If `smartlead_campaign_id` is not yet known** (campaign not created yet): write the table with `NULL` for that field, then run an UPDATE after Step 6A:
 ```sql
@@ -1194,10 +1308,6 @@ Email 1 Fallback — no city (if applicable)
 
 Email 2 — plain text, no links
 Subject: same thread (no new subject)
-{body}
-
-Email 3 — plain text, no links
-Subject: {subject3}
 {body}
 
 ---
@@ -1304,28 +1414,20 @@ Body: {"sequences": [
     "seq_delay_details": {"delay_in_days": 3},
     "subject": "",
     "email_body": "<div>{{Email2}}</div>"
-  },
-  {
-    "seq_number": 3,
-    "seq_delay_details": {"delay_in_days": 5},
-    "subject": "{{Subject3}}",
-    "email_body": "<div>{{Email3}}</div>"
   }
 ]}
 ```
-**Sequence timing:** Day 0 → Day 3 → Day 8 (total 8-day sequence).
-- +3 days for Email 2: standard lower-bound, matches "you had time to see it" window.
-- +5 days for Email 3: industry best practice is 5-7 days for the final touch (avoids appearing pushy).
-- Avoid sequences under 7 days total — compresses into spam-trigger territory.
+**Sequence timing:** Day 0 → Day 3 (3-day sequence). Email 3 had a 0.09% positive rate across 14K sends and is not included by default. If the user explicitly requests a 3rd email, add it at +5 days with its own subject to start a new thread.
 
 **Subject threading rules:**
 - Email 2: subject MUST be empty → SmartLead sends as a reply in the same thread as Email 1.
-- Email 3: subject MUST be set (`{{Subject3}}`) → SmartLead starts a new thread. This is intentional — Email 3 uses a different angle/trigger, and arriving as a fresh email improves open rate.
-- If Email 3 subject is empty, it threads as a third reply, which looks robotic and reduces opens.
 ⚠️ Sequence body: trailing `<div><br></div>` after Email1 adds spacing before auto-appended signature.
 ⚠️ NO `%signature%` in body — it renders as literal text via API. Signature auto-appends.
-⚠️ To UPDATE existing sequences: include the `"id"` field from `GET /campaigns/{id}/sequences`.
-   Omitting `id` = creates new sequences, does not update existing ones.
+⚠️ **Sequences endpoint replaces the full array — NEVER send a partial update.**
+   `POST /campaigns/{id}/sequences` with a list that omits existing sequences will **DELETE** them.
+   Always fetch current sequences first (`GET /campaigns/{id}/sequences`) and include ALL of them
+   (with their `id` fields) in every POST, even if you're only changing one.
+   Omitting `id` creates a new sequence; including `id` updates the existing one.
 
 ### Step 6E — Inbox selection and assignment
 
@@ -1491,10 +1593,8 @@ Body:
       "location": "Austin, Texas",
       "custom_fields": {
         "Subject1": "do you write commercial insurance in Austin?",
-        "Subject3": "local restaurant contacts in Austin",
         "Email1": "John\n\nOpening question here.\n\nPitch + CTA.",
-        "Email2": "plain text email 2 with \\n line breaks, no HTML, no links",
-        "Email3": "plain text email 3 with \\n line breaks, no HTML, no links"
+        "Email2": "plain text email 2 with \\n line breaks, no HTML, no links"
       }
     }
   ],
@@ -1506,8 +1606,8 @@ Body:
 ```
 ⚠️ NEVER use `{{companyName}}` or other camelCase native SmartLead vars -- they don't map reliably.
 ⚠️ Native vars that DO work: `{{firstName}}`, `{{lastName}}`, `{{email}}`, `{{location}}`
-⚠️ **All emails line break conversion at load time:** ALL bodies (Email1, Email2, Email3) stored as
-   plain text with `\n`. At load time, convert `\n\n` -> `<br><br>` and remaining `\n` -> `<br>`.
+⚠️ **Line break conversion at load time:** ALL bodies (Email1, Email2) stored as plain text with `\n`.
+   At load time, convert `\n\n` -> `<br><br>` and remaining `\n` -> `<br>`.
    No email body may contain HTML tags or links in stored form.
 ⚠️ **Lead update endpoint:** `POST /campaigns/{id}/leads/{lead_id}` with `{"email": "...", "custom_fields": {...}}`.
    Use this to fix custom fields after load (e.g. blank city). Update sequentially with 0.3s delay + retry on 429.
@@ -1519,40 +1619,32 @@ Body:
 
 ## PHASE 7 — Pre-Launch QA
 
-Run every check before `status: START`.
-
-**Copy QA** (must be completed in Phase 5B before reaching here — 3-pass check done, user signed off)
+Confirm every Phase 6 step was completed correctly before `status: START`. This is a verification pass, not a redo — spot-check each item against what was set up in Phase 6.
 
 ```
-CAMPAIGN SETUP
-□ Campaign name follows taxonomy: {Strategy} - {ICP} - {Channel} - {Approach} - {CTA} - {Version}
-□ Strategy is PLG or SLG (not "CRE" or "BB" directly in Strategy position)
-□ Settings: send_as_plain_text=True, force_plain_text=True, enable_ai_esp_matching=True
-□ Settings: track_settings = ["DONT_EMAIL_OPEN", "DONT_LINK_CLICK"]
-□ Settings: follow_up_percentage=50, stop_lead_settings=REPLY_TO_AN_EMAIL
-□ Schedule: Mon-Fri, 9am-7pm ET, max_new_leads_per_day set (see 3-rule sizing formula)
+CAMPAIGN SETUP (verify Phase 6A–6C)
+□ Campaign name confirmed correct in SmartLead — follows taxonomy
+□ Strategy field is PLG or SLG (not "CRE" or "BB" directly)
+□ All settings confirmed applied (Phase 6B): GET /campaigns/{id} and verify send_as_plain_text, enable_ai_esp_matching, track_settings, follow_up_percentage
+□ Schedule confirmed: Mon-Fri, 9am-7pm ET, max_new_leads_per_day matches sizing decision
+□ Manual UI steps done (Phase 6B-UI): OOO auto-restart ON + AI categorization set in old UI
 
-SEQUENCES
-□ 3 sequences loaded with correct delays (day 0, +3, +8 total)
-□ Email 1: subject = {{Subject1}}
-□ Email 2: subject = EMPTY (threads as reply to Email 1)
-□ Email 3: subject = {{Subject3}} (starts a new thread — different angle from Email 1)
-□ All 3 sequences use {{Email1}}, {{Email2}}, {{Email3}} in body
+SEQUENCES (verify Phase 6D)
+□ 2 sequences loaded — day 0 and +3
+□ Email 1: subject = {{Subject1}}, Email 2: subject = EMPTY (threads as reply)
+□ Sequence bodies use {{Email1}} and {{Email2}}
 
-INBOXES
-□ BQ tables rebuilt before inbox selection (build_all_smartlead_accounts.py)
-□ Inboxes: all 4 rules pass — account >14d, warmup >14d, warmup ACTIVE, 0 active campaigns (per BQ)
-□ Inboxes: none are in any CRE campaign (verified via BQ campaign_name check)
-□ AI categorization: enabled manually in SmartLead OLD interface → AI & Automation tab → SmartLead AI → enable all categories (new UI limits to 5 categories only; API not available)
-□ Signatures set on all inboxes
-□ Warmup ON on all inboxes (POST /email-accounts/{id}/warmup {"warmup_enabled": true})
+INBOXES (verify Phase 6E–6F)
+□ BQ tables were rebuilt before selection (build_all_smartlead_accounts.py)
+□ Inboxes all pass eligibility: warmup ACTIVE, >14d, reputation >90%, 0 active campaigns per BQ
+□ Domain diversity confirmed — no clustering on same domain or robotic usernames
+□ Signatures set on all assigned inboxes (Phase 6F)
+□ Warmup confirmed ON on all inboxes
 
-LEADS & COPY
-□ Leads loaded with all custom fields populated — Subject1, Subject3, Email1, Email2, Email3
-  (spot-check 5 leads via GET /campaigns/{id}/leads)
-□ ALL email bodies are PLAIN TEXT — zero links, zero HTML tags in any body
-□ All bodies stored with \n line breaks (converted to <br> at load time)
-□ Phase 5B 3-pass copy check completed and user signed off
+LEADS & COPY (verify Phase 6G + Phase 5B)
+□ Spot-check 5 leads via GET /campaigns/{id}/leads — Subject1, Email1, Email2 all populated
+□ ALL email bodies confirmed plain text — zero links, zero HTML in any body
+□ Phase 5B 3-pass copy check was completed and user signed off
 ```
 
 ---
@@ -1647,12 +1739,13 @@ WHERE SPLIT(email, '@')[OFFSET(1)] = 'targetdomain.com'
 
 ### When to feed more leads
 - Campaign has <50 leads in queue
-- Reply rate is positive (≥0.5% positive rate)
+- Reply rate is positive (≥0.5% PLG, ≥1.5% CRE/BB)
 - Go back to enriched pool, take next batch, load via Phase 6G
 
 ### When to kill a campaign
-- 200+ sends with 0 positive replies → reconsider copy or ICP quality
-- Inbox bounce rate >5% → remove those inboxes, investigate domain health
+- 200+ sends with 0 positive replies → pause, audit copy and ICP quality before resuming
+- Inbox bounce rate >5% → remove those inboxes immediately, investigate domain health
+- Positive rate drops >50% vs campaign baseline over 7 days → check for inbox issues or copy fatigue
 
 ### Positive reply definition
 ```python
@@ -1660,6 +1753,49 @@ POSITIVE_CATEGORIES = {'Interested', 'Meeting Request', 'Meeting Booked', 'Infor
 is_positive = r.get('reply_time') and r.get('lead_category') in POSITIVE_CATEGORIES
 # reply_time MUST be present — SmartLead pre-classifies all leads, even unreplied ones
 ```
+
+---
+
+### Failure Mode Guide
+
+**Problem: Inbox blocked (`blocked_reason` is set)**
+- Remove the inbox from all active campaigns immediately via `DELETE /campaigns/{id}/email-accounts`
+- Do NOT re-add it — a blocked inbox needs manual review and domain recovery before reuse
+- Check if other inboxes on the same domain are also affected
+- Replace with a fresh Tier 1 inbox from the pool (rebuild BQ first)
+
+**Problem: Bounce rate spiking (>3–5%)**
+- Pull the bounce list and check which inboxes they're coming from
+- If concentrated on one inbox → remove it, run BillionVerify on remaining uncontacted leads
+- If spread across inboxes → the contact list itself has quality issues; run a fresh BillionVerify pass on all remaining leads before sending more
+- Stop the campaign before SmartLead hits domain blacklisting thresholds (usually triggered around 5–8% sustained bounce rate)
+
+**Problem: Campaign paused unexpectedly**
+- Check `GET /campaigns/{id}` for status
+- Most likely cause: SmartLead auto-paused due to a bounce spike or a manual trigger
+- Check inbox health, then restart with `POST /campaigns/{id}/status {"status": "START"}` only after diagnosing why it paused
+
+**Problem: Zero positive replies after 100+ sends**
+- First check: is copy correct? Pull 5 sample leads via `GET /campaigns/{id}/leads` and verify Email1/Email2 fields are populated and personalized
+- Second check: is Subject1 set correctly? Generic or blank subjects kill open rates
+- Third check: are inboxes landing in inbox or spam? Ask a team member to check a real received email
+- If copy and deliverability check out → the ICP or keyword may be wrong. Review SEARCH_LOG.md and reconsider segment
+
+**Problem: OOO leads piling up (paused, not re-engaging)**
+- Check if OOO auto-restart is ON in SmartLead UI (Campaign settings → Lead Management)
+- If it's OFF, manually restart OOO leads by filtering on lead_category = 'OOO' and resuming sequence
+- If it's ON and still piling up, the return date detection may be failing — flag to SmartLead support
+
+**Problem: SmartLead shows leads as "Completed" but they never got Email 2**
+- Most common cause: Email 2 subject was set (non-empty) instead of empty — SmartLead may have failed to thread it
+- Verify sequences via `GET /campaigns/{id}/sequences` — Email 2 `subject` must be `""`
+- If sequences are wrong, fix and reload — leads already completed won't get a resend automatically
+
+**Problem: Ran out of eligible inboxes**
+- Do NOT steal inboxes from active campaigns
+- Request new inbox provisioning (3–4 weeks lead time for warmup)
+- In the interim: reduce daily send rate on the new campaign or delay launch
+- If using Tier 2 fallback inboxes (1 active campaign), prioritize ones closest to campaign completion
 
 ---
 
