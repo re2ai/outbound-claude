@@ -124,8 +124,17 @@ for camp_id, camp_name, n_to_add, new_daily in TARGETS:
 
     # Update daily rate if specified
     if new_daily:
-        resp2 = sl_post(f"campaigns/{camp_id}", {"max_leads_per_day": new_daily})
-        print(f"  Daily rate updated to {new_daily}: {resp2.get('message') or 'ok'}")
+        camp = sl_get(f"campaigns/{camp_id}")
+        cron = camp.get("scheduler_cron_value") or {}
+        resp2 = sl_post(f"campaigns/{camp_id}/schedule", {
+            "timezone":              cron.get("tz", "America/New_York"),
+            "days_of_the_week":      cron.get("days", [1, 2, 3, 4, 5]),
+            "start_hour":            cron.get("startHour", "09:00"),
+            "end_hour":              cron.get("endHour", "19:00"),
+            "min_time_btw_emails":   camp.get("min_time_btwn_emails", 30),
+            "max_new_leads_per_day": new_daily,
+        })
+        print(f"  Daily rate updated to {new_daily}: {resp2.get('ok') or 'ok'}")
 
     time.sleep(0.5)
 
