@@ -283,3 +283,5 @@ POST /email-accounts/{id}                {"message_per_day": 20, "signature": ".
 
 All requests: `?api_key=SMARTLEAD_API_KEY`
 Base URL: `https://server.smartlead.ai/api/v1`
+
+**Full endpoint reference:** `SMARTLEAD_API.md` — check this before writing any new API call. If you need an endpoint not listed there, fetch https://helpcenter.smartlead.ai/en/articles/125-full-api-documentation and add it to `SMARTLEAD_API.md` before using it.

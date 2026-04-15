@@ -73,6 +73,8 @@ These are the baselines to beat. Any new campaign variant below these rates need
 For detailed copy analysis by segment, run: `python analyze_copy_segments.py` (outbound/).
 
 ```python
+# SmartLead API reference: SMARTLEAD_API.md — check before any direct API call.
+# If endpoint not listed, fetch https://helpcenter.smartlead.ai/en/articles/125-full-api-documentation and add it first.
 # smartlead_pull.py has get_plg_campaign_breakdown() — use it
 # Or query directly:
 from smartlead_pull import get_all_campaigns, get_campaign_statistics, aggregate_stats
