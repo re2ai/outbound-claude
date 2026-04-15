@@ -71,7 +71,7 @@ r = requests.patch(f'{BASE}/campaigns/{campaign_id}/status',
   "start_hour": "08:00",
   "end_hour": "19:00",
   "min_time_btw_emails": 20,
-  "max_leads_per_day": 300
+  "max_new_leads_per_day": 300
 }
 ```
 

@@ -1386,6 +1386,17 @@ Without it, OOO leads sit paused forever and never receive their follow-ups.
 ⚠️ Neither setting is exposed in `GET /campaigns/{id}` — you cannot verify them via API.
    Always do this step manually and confirm in the UI before launching.
 
+**MANDATORY CONFIRMATION — do not proceed past this step without explicit sign-off:**
+
+> Claude must ask the person launching the campaign:
+> "Before we move on — have you confirmed both of these in the SmartLead UI?
+> 1. OOO auto-restart is ON (Campaign settings → Lead Management → Automatically restart ai-categorised OOO when lead returns)
+> 2. AI lead categorization is configured with all 8 categories (Interested, Meeting Request, Meeting Booked, Information Request, Not Interested, OOO, Wrong Person, Unsubscribe)
+>
+> Reply YES to confirm both are set, or I'll wait."
+
+Do not proceed to Step 6C until the person launching confirms both. These cannot be verified via API — human confirmation is the only gate.
+
 ### Step 6C — Set schedule
 ```
 POST /campaigns/{id}/schedule
@@ -1395,8 +1406,8 @@ Body:
   "days_of_the_week": [1, 2, 3, 4, 5],   ← Mon-Fri only
   "start_hour": "09:00",
   "end_hour": "19:00",
-  "min_time_btw_emails": 30,
-  "max_new_leads_per_day": N              ← See sizing formula below
+  "min_time_btw_emails": 20,
+  "max_new_leads_per_day": N            ← See sizing formula below (API requires this exact key)
 
 }
 ```
@@ -1630,6 +1641,7 @@ CAMPAIGN SETUP (verify Phase 6A–6C)
 □ All settings confirmed applied (Phase 6B): GET /campaigns/{id} and verify send_as_plain_text, enable_ai_esp_matching, track_settings, follow_up_percentage
 □ Schedule confirmed: Mon-Fri, 9am-7pm ET, max_new_leads_per_day matches sizing decision
 □ Manual UI steps done (Phase 6B-UI): OOO auto-restart ON + AI categorization set in old UI
+  ↳ CONFIRMED by person launching — do not check this box without their explicit verbal/written confirmation
 
 SEQUENCES (verify Phase 6D)
 □ 2 sequences loaded — day 0 and +3
@@ -1652,6 +1664,16 @@ LEADS & COPY (verify Phase 6G + Phase 5B)
 ---
 
 ## PHASE 8 — Launch
+
+**Before calling START — final confirmation check.**
+Claude must explicitly ask the person launching:
+> "Last check before we go live — can you confirm:
+> 1. OOO auto-restart is ON in the SmartLead UI?
+> 2. AI lead categorization is set with all 8 categories?
+>
+> Reply YES and I'll start the campaign."
+
+Do not send the START request until you receive confirmation. This is a hard stop.
 
 ```
 POST /campaigns/{id}/status
