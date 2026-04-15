@@ -135,6 +135,30 @@ total, notStarted, inprogress, completed, paused, blocked, stopped, interested, 
 
 ---
 
+## Error Handling
+
+Whenever a SmartLead API call returns an error, **stop immediately and tell the user**. Do not silently retry, skip, or proceed assuming the operation succeeded. Show the status code, the error message from the response body, and what step failed.
+
+| Code | Meaning | What to do |
+|------|---------|------------|
+| `400 Bad Request` | Wrong field name, missing required field, or invalid value. Response body usually names the field. | Show the exact error message. Fix the field and retry — do not guess blindly. Check this doc for the correct field names before retrying. |
+| `401 Unauthorized` | API key missing or invalid. | Tell the user: "SmartLead returned 401 — the API key may be missing or expired. Check the `.env` file." Do not retry. |
+| `404 Not Found` | Wrong endpoint path or the campaign/inbox ID doesn't exist. | Show the URL that failed. Check this doc — several intuitive routes don't exist (e.g. `PATCH /campaigns/{id}`). If the ID came from the user, confirm it's correct. |
+| `405 Method Not Allowed` | Wrong HTTP method for this endpoint (e.g. using PATCH where POST is required). | Check the endpoint table above for the correct method. |
+| `422 Unprocessable Entity` | Request was understood but semantically invalid (e.g. bad enum value). | Show the response body. Fix the value and retry. |
+| `429 Too Many Requests` | Rate limited. | Wait 5 seconds and retry once. If it fails again, tell the user and stop. |
+| `5xx Server Error` | SmartLead-side issue. | Tell the user: "SmartLead returned [code] — this is a server-side error. Wait a minute and try again, or check SmartLead status." Do not retry in a loop. |
+
+**Template for reporting an error to the user:**
+> "SmartLead returned a [STATUS CODE] error on [step name].
+> Error: [exact message from response body]
+> This means [plain-English explanation].
+> To fix this: [specific next step — e.g. 'check the field name', 'verify the campaign ID', 'wait and retry']."
+
+Never proceed to the next campaign step after an API error without the user acknowledging the failure and confirming how to continue.
+
+---
+
 ## Notes
 
 - **Pagination:** Use `offset` + `limit` (max 100). Loop until response length < limit.

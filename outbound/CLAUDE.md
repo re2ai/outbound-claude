@@ -160,3 +160,5 @@ When starting a new campaign, propose an Approach and CTA based on the ICP, expl
 | Clay | `CLAY` | Outbound enrichment FROM Clay only — no inbound API |
 
 **Before writing any SmartLead API call:** check `SMARTLEAD_API.md` first. It has all confirmed working endpoints, correct HTTP methods, and request body shapes. Do not guess — several intuitive routes (e.g. `PATCH /campaigns/{id}`) return 404. If you need an endpoint not in that file, fetch https://helpcenter.smartlead.ai/en/articles/125-full-api-documentation and add it to `SMARTLEAD_API.md` before using it.
+
+**On any API error (400, 401, 404, 405, 422, 429, 5xx):** stop, report the error to the user with the status code and exact response body, explain what it means, and propose a fix. Never proceed silently after a failed API call. See `SMARTLEAD_API.md` → Error Handling for the full protocol.
