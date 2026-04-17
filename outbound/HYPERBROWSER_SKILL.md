@@ -15,7 +15,7 @@ API key: `HYPERBROWSER_API_KEY` in `.env`. Python SDK: `pip install hyperbrowser
 ### Table of Contents
 1. [Decision Tree — Pick Your Tool](#section-1-decision-tree--pick-your-tool)
 2. [Fetch API (Primary Tool for Protected Sites)](#section-2-fetch-api-primary-tool-for-protected-sites)
-3. [The 10 MCP Tools](#section-3-the-10-mcp-tools)
+3. [The 12 MCP Tools + 2 SDK-Only Agents](#section-3-the-10-mcp-tools)
 4. [Python SDK Patterns (A–D)](#section-4-python-sdk-patterns)
 5. [Session Options Reference](#section-5-session-options-reference-complete)
 6. [Computer Actions API](#section-6-computer-actions-api)
@@ -23,9 +23,10 @@ API key: `HYPERBROWSER_API_KEY` in `.env`. Python SDK: `pip install hyperbrowser
 8. [Anti-Detection Playbook (4 Tiers)](#section-8-anti-detection-playbook)
 9. [Profile Inventory](#section-9-profile-inventory)
 10. [Cost Reference](#section-10-cost-reference)
-11. [Existing Usage in This Repo](#section-11-existing-usage-in-this-repo)
-12. [LoopNet Architecture (Reference Example)](#section-12-loopnet-architecture-reference-example)
-13. [Troubleshooting](#section-13-troubleshooting)
+11. [Advanced SDK Capabilities](#section-11-advanced-sdk-capabilities-python-only) — credit monitoring, session mgmt, extensions, volumes, web search/crawl, scrape options, sandbox power features
+12. [Existing Usage in This Repo](#section-12-existing-usage-in-this-repo)
+13. [LoopNet Architecture (Reference Example)](#section-13-loopnet-architecture-reference-example)
+14. [Troubleshooting](#section-14-troubleshooting)
 
 ---
 
@@ -265,39 +266,49 @@ Web search returning title, URL, snippet per result.
 ---
 
 ### 5. `browser_use_agent`
-Fast lightweight browser automation. Best cost/performance for most tasks.
+Fast lightweight browser automation. Best cost/performance for most interactive tasks.
 
 | Param | Default | Notes |
 |-------|---------|-------|
 | `task` | — | Natural language. Be very explicit and step-by-step. |
-| `llm` | `gemini-2.0-flash` | Also: `gpt-5.4`, `gpt-5.4-mini`, `claude-sonnet-4-6`, `gemini-2.5-flash` |
+| `llm` | `gemini-2.0-flash` | See LLM table below |
 | `maxSteps` | 25 | Budget cap. 1 step ≈ $0.02 |
 | `useVision` | true | Screenshot analysis. Keep enabled for complex layouts. |
+| `useVisionForPlanner` | false | Separate vision for planning steps |
 | `validateOutput` | false | Validate result against schema |
+| `outputModelSchema` | — | JSON schema or Pydantic model for structured output |
 | `maxActionsPerStep` | 10 | Actions per LLM step |
-| `plannerLlm` | — | Separate model for planning (use cheaper model here) |
-| `pageExtractionLlm` | — | Separate model for extraction |
+| `maxFailures` | 3 | Consecutive failures before abort |
+| `maxInputTokens` | — | Limit input context per step |
+| `plannerLlm` | — | Separate cheaper model for planning |
+| `plannerInterval` | — | How often the planner runs |
+| `pageExtractionLlm` | — | Separate model for data extraction |
+| `messageContext` | — | Extra context string injected into each LLM call |
 | `initialActions` | — | Pre-task setup actions array |
-| `sensitiveData` | — | `{"PASSWORD": "actual-val"}` — masked from LLM, injected at runtime |
+| `sensitiveData` | — | `{"PASSWORD": "val"}` — masked from LLM, injected at runtime |
 | `keepBrowserOpen` | false | Reuse session: pass `sessionId` in next call |
 | `sessionId` | — | Attach to existing open session |
-| `returnStepInfo` | false | Return step-by-step debug info (verbose, use only when debugging) |
+| `returnStepInfo` | false | Return step-by-step debug info |
+| `version` | `latest` | Also: `0.1.40`, `0.7.10` |
+| `apiKeys` | — | Bring your own keys: `{openai: "sk-...", anthropic: "sk-...", google: "..."}` |
 | `sessionOptions` | — | See Section 5 |
 
-**Cost:** ~$0.02/step
+**LLMs:** `gpt-5`, `gpt-5-mini`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `gemini-2.0-flash`, `gemini-2.5-flash`
+
+**Cost:** ~$0.02/step. All agents have `.stop()` to abort a running task.
 
 ---
 
 ### 6. `openai_computer_use_agent`
-Full-screen computer vision automation via OpenAI CUA. Slower but very capable.
+Full-screen computer vision via OpenAI CUA. Best for visual tasks on complex UIs.
 
 | Param | Default | Notes |
 |-------|---------|-------|
 | `task` | — | Natural language |
-| `llm` | `gpt-5.4` | Also: `gpt-5.4-mini` |
+| `llm` | `gpt-5.4` | Also: `gpt-5.4-mini`, `computer-use-preview` |
 | `maxSteps` | 20 | |
 | `maxFailures` | 3 | Consecutive failures before abort |
-| `useComputerAction` | false | Enable full-screen interaction (not just DOM elements) |
+| `useComputerAction` | false | Full-screen interaction (not just DOM) |
 | `keepBrowserOpen` | false | |
 | `sessionId` | — | |
 | `useCustomApiKeys` | false | Use your own OpenAI key to reduce credit cost |
@@ -311,20 +322,59 @@ Best reasoning, full-screen vision. Use when accuracy matters most.
 | Param | Default | Notes |
 |-------|---------|-------|
 | `task` | — | Natural language |
-| `llm` | `claude-sonnet-4-5` | Also: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` |
+| `llm` | `claude-sonnet-4-5` | Also: `claude-opus-4-6`, `claude-opus-4-5`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-20250514` |
 | `maxSteps` | 20 | |
 | `maxFailures` | 3 | |
-| `useComputerAction` | false | Full-screen (not just page) — enable for elements outside Playwright reach |
+| `useComputerAction` | false | Full-screen (not just page) |
 | `keepBrowserOpen` | false | |
 | `sessionId` | — | |
 | `useCustomApiKeys` | false | Use your own Anthropic key |
 | `sessionOptions` | — | |
 
-**Cost:** Token-based. Haiku is ~3x cheaper than Sonnet; use Haiku for simple vision tasks.
+**Cost:** Token-based. Haiku ~3x cheaper than Sonnet; use Haiku for simple vision tasks.
 
 ---
 
-### 8–10. Profile Management
+### 8. `gemini_computer_use_agent` *(not available as MCP tool)*
+Google's computer use agent. Access via Python SDK only: `client.agents.gemini_computer_use`.
+
+| Param | Default | Notes |
+|-------|---------|-------|
+| `task` | — | Natural language |
+| `llm` | — | `gemini-3-flash-preview`, `gemini-2.5-computer-use-preview-10-2025` |
+| `maxSteps` | 20 | |
+| `maxFailures` | 3 | |
+| `useComputerAction` | false | |
+| `apiKeys` | — | `{google: "your-key"}` |
+| `sessionOptions` | — | |
+
+---
+
+### 9. `hyper_agent` *(not available as MCP tool)*
+Hyperbrowser's own agent with anti-bot patches and optional visual mode. SDK only: `client.agents.hyper_agent`.
+
+| Param | Default | Notes |
+|-------|---------|-------|
+| `task` | — | Natural language |
+| `llm` | — | `gpt-5`, `gpt-5-mini`, `gpt-4o`, `claude-sonnet-4-6`, `gemini-2.5-flash`, `gemini-3-flash-preview` + many more |
+| `enableVisualMode` | false | Unique to this agent — screenshot-based interaction |
+| `version` | — | `0.8.0` or `1.1.0` |
+| `maxSteps` | 20 | |
+| `apiKeys` | — | `{openai: "...", anthropic: "...", google: "..."}` |
+| `sessionOptions` | — | |
+
+### Agent selection guide
+| Need | Best agent |
+|------|-----------|
+| Fast scraping/form filling | `browser_use_agent` (gemini-2.0-flash) |
+| Complex reasoning, accuracy critical | `claude_computer_use_agent` (sonnet-4-6) |
+| Visual UI interaction (screenshots) | `openai_computer_use_agent` or `hyper_agent` with visual mode |
+| Cost-sensitive with own API keys | Any agent with `useCustomApiKeys: true` or `apiKeys: {...}` |
+| Anti-bot with built-in patches | `hyper_agent` |
+
+---
+
+### 10–12. Profile Management
 `create_profile`, `list_profiles`, `delete_profile` — see Section 9.
 
 ---
@@ -891,7 +941,190 @@ New cookies overwrite old ones.
 
 ---
 
-## Section 11: Existing Usage in This Repo
+## Section 11: Advanced SDK Capabilities (Python Only)
+
+These features are only available via the Python SDK, not MCP tools.
+
+### Credit Monitoring
+```python
+info = client.team.get_credit_info()
+print(f"Used: {info.usage} / {info.limit} | Remaining: {info.remaining}")
+```
+Check this before and during large runs to avoid silent 402 failures.
+
+### Session Management (beyond create/stop)
+```python
+# List active sessions
+sessions = client.sessions.list(status="active")
+
+# Get session details (includes credits_used, ws_endpoint, live_url)
+detail = client.sessions.get(session_id)
+print(detail.credits_used, detail.credit_breakdown)
+
+# Mid-session proxy change (switch location without recreating)
+client.sessions.update_proxy_params(session_id, UpdateSessionProxyParams(
+    enabled=True, location=UpdateSessionProxyLocationParams(country="US", state="TX")
+))
+
+# Extend timeout on a running session
+client.sessions.extend_session(session_id)
+
+# Upload a file into the session browser
+client.sessions.upload_file(session_id, file_path="./data.csv")
+
+# Get recording (if enableWebRecording was true)
+url = client.sessions.get_recording_url(session_id)
+
+# Get CAPTCHA event logs (monitor solving success)
+logs = client.sessions.event_logs(session_id)
+# Events: captcha_detected, captcha_solved, captcha_error, file_downloaded
+```
+
+**Selenium compatibility:** `detail.webdriver_endpoint` provides a WebDriver URL — you can use Selenium, not just Playwright.
+
+### Extensions API (Chrome Extensions)
+```python
+# Upload a Chrome extension (.crx or unpacked)
+ext = client.extensions.create(CreateExtensionParams(name="my-ext", file_path="./ext.crx"))
+# Use in sessions:
+session = client.sessions.create(CreateSessionParams(extension_ids=[ext.id]))
+# List/manage extensions
+all_exts = client.extensions.list()
+```
+
+### Volumes API (Persistent Storage for Sandboxes)
+```python
+vol = client.volumes.create(CreateVolumeParams(name="scrape-data"))
+# Mount into sandbox:
+sandbox = client.sandboxes.create(CreateSandboxParams(
+    mounts={"/data": SandboxVolumeMount(id=vol.id, type="rw", shared=True)}
+))
+```
+
+### Web Search API (Full Bing Search)
+```python
+from hyperbrowser.models.web.search import StartWebSearchParams
+
+result = client.web.search.start_and_wait(StartWebSearchParams(
+    query="commercial real estate broker Miami",
+    max_results=20,
+    location=WebSearchLocation(country="US", state="FL"),
+    filters=WebSearchFilters(
+        site="loopnet.com",          # restrict to domain
+        exclude_site="facebook.com", # exclude domain
+        exact_phrase="retail lease", # must contain this phrase
+        filetype="pdf",             # file type filter
+        intitle="broker profile",   # title must contain
+    ),
+))
+for item in result.data.results:
+    print(f"{item.title}: {item.url}")
+```
+
+### Web Crawl API (Full Multi-Page Crawl)
+```python
+from hyperbrowser.models.web.crawl import StartWebCrawlJobParams, WebCrawlOptions
+
+result = client.web.crawl.start_and_wait(StartWebCrawlJobParams(
+    url="https://example.com",
+    stealth="ultra",
+    crawl_options=WebCrawlOptions(
+        max_pages=50,
+        follow_links=True,
+        ignore_sitemap=False,
+        include_patterns=["*/listings/*"],
+        exclude_patterns=["*/login*", "*/signup*"],
+    ),
+    outputs=FetchOutputOptions(markdown=True),
+), return_all_pages=True)
+for page in result.data.pages:
+    print(f"{page.url}: {len(page.markdown)} chars")
+```
+
+### Scrape Options (Advanced)
+```python
+# When using client.scrape.start_and_wait(), scrapeOptions supports:
+scrape_options = {
+    "formats": ["markdown", "html", "screenshot"],
+    "includeTags": ["article", "main"],      # only include these HTML tags
+    "excludeTags": ["nav", "footer", "ads"],  # exclude these
+    "onlyMainContent": True,                  # strip nav/sidebar/footer
+    "waitFor": 3000,                          # wait 3s before scraping
+    "waitUntil": "networkidle",               # or "load", "domcontentloaded"
+    "timeout": 30000,
+    "screenshotOptions": {
+        "fullPage": True,
+        "format": "png",  # or "jpeg", "webp"
+        "cropToContent": True,
+    },
+    "storageState": {                         # inject cookies/localStorage
+        "localStorage": [{"name": "token", "value": "abc123"}],
+    },
+}
+```
+
+### Fetch Output Options (Advanced)
+```python
+# Beyond simple html=True/markdown=True, FetchOutputOptions supports:
+outputs = FetchOutputOptions(
+    html=True,
+    markdown=True,
+    screenshot=FetchOutputScreenshot(type="screenshot", full_page=True, format="png", crop_to_content=True),
+    json_=FetchOutputJson(type="json", prompt="Extract all listings", schema_={...}),
+    # Filter content:
+    include_selectors=["main", "article", ".listing"],  # CSS selectors to keep
+    exclude_selectors=["nav", "footer", ".ads"],         # CSS selectors to remove
+    sanitize="advanced",  # "none", "basic", or "advanced" HTML cleanup
+    # Inject state:
+    storage_state=FetchStorageStateOptions(
+        local_storage=[{"name": "auth", "value": "token123"}],
+    ),
+)
+```
+
+### Additional Computer Actions
+```python
+# Beyond move_mouse, click, type_text, scroll — also available:
+client.computer_action.get_clipboard_text(session_id)           # read clipboard
+client.computer_action.put_selection_text(session_id, "paste")  # paste into selection
+client.computer_action.hold_key(session_id, key="Shift", duration=2000)  # hold key N ms
+client.computer_action.mouse_down(session_id, button="left")    # press without release
+client.computer_action.mouse_up(session_id, button="left")      # release
+```
+
+### Sandbox Power Features
+```python
+# Start from snapshot (resume previous state)
+sandbox = client.sandboxes.start_from_snapshot(StartSandboxFromSnapshotParams(snapshot_id="..."))
+
+# Full filesystem API
+sandbox.files.list("/app", depth=3)
+sandbox.files.read_bytes("/app/data.csv")
+sandbox.files.write_bytes("/app/output.json", data)
+sandbox.files.mkdir("/app/results", parents=True)
+sandbox.files.move("/tmp/out.csv", "/app/results/final.csv", overwrite=True)
+sandbox.files.watch("/app/data/", recursive=True)  # file change events
+
+# Terminal API
+terminal = sandbox.terminals.create(command="python3", args=["script.py"], cwd="/app")
+terminal.wait()  # wait for completion with output capture
+
+# Process management
+procs = sandbox.processes.list(status="running")
+sandbox.processes.kill(proc_id, signal="SIGTERM")
+
+# Port exposure (serve web apps from sandbox)
+sandbox.expose(port=8080)
+url = sandbox.get_exposed_url(8080)
+
+# Snapshots (save/restore state)
+snapshot = client.sandboxes.create_snapshot(sandbox_id)
+# Later: client.sandboxes.start_from_snapshot(snapshot_id=snapshot.id)
+```
+
+---
+
+## Section 12: Existing Usage in This Repo
 
 | Script | Pattern | Purpose |
 |--------|---------|---------|
@@ -910,7 +1143,7 @@ All 10 tools available as `mcp__hyperbrowser__*`. Use them directly in conversat
 
 ---
 
-## Section 12: LoopNet Architecture (Reference Example)
+## Section 13: LoopNet Architecture (Reference Example)
 
 LoopNet is protected by **Akamai Enterprise** (deployed by CoStar group-wide).
 **Verified 2026-04-16:** `web.fetch(stealth="ultra")` bypasses Akamai. 579 listings returned, 66K markdown.
@@ -978,7 +1211,7 @@ github.com/johnstenner/LoopnetMCP for a working implementation).
 
 ---
 
-## Section 13: Troubleshooting
+## Section 14: Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
