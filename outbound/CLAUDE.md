@@ -149,6 +149,20 @@ When starting a new campaign, propose an Approach and CTA based on the ICP, expl
 
 ---
 
+## BROWSER AUTOMATION & SCRAPING
+
+When OpenAI web search isn't enough, use Hyperbrowser (already configured in `.mcp.json`).
+
+**→ Read `HYPERBROWSER_SKILL.md` before writing any scraping code.**
+
+It covers: decision tree (which tool to use when), all 10 MCP tools, Python SDK patterns,
+anti-detection cheat sheet, cost guide, and the LoopNet scraping architecture.
+
+MCP tools are available in Claude Code as `mcp__hyperbrowser__*`.
+Profile inventory (saved sessions) is in `HYPERBROWSER_SKILL.md` § Section 9.
+
+---
+
 ## APIs & KEYS (all in .env)
 
 | Service | Env var | Notes |

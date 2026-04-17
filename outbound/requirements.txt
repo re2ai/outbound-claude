@@ -1,3 +1,6 @@
 google-cloud-bigquery
 python-dotenv
 requests
+hyperbrowser
+playwright
+curl_cffi
