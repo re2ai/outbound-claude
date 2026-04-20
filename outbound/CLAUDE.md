@@ -5,23 +5,33 @@ Read it before starting any campaign. Everything below is startup context only.
 
 ---
 
+## HARD STOPS — Non-Negotiable Gates
+
+These are blocking checkpoints. Claude must STOP and wait for explicit user confirmation before advancing past each one. "Yes", "sure", "go ahead" are NOT sufficient — the user must type the exact confirmation phrase shown.
+
+| Gate | What to check | Required phrase |
+|------|--------------|-----------------|
+| **Before Apollo enrichment** | Show contact count and estimated credit cost | `"spend credits"` |
+| **Before loading leads to SmartLead** | Confirm BillionVerify ran, show deliverable count and yield % | `"emails verified"` |
+| **Before creating SmartLead campaign** | Show full campaign name (taxonomy format), confirm sequence copy | `"name confirmed"` |
+| **Before campaign launch (ACTIVE)** | Confirm OOO restart ON + AI categorization set manually in UI | `"UI done"` |
+| **Before stopping/pausing/deleting any campaign** | State campaign name, reason, and consequence | `"confirmed delete"` / `"confirmed pause"` |
+
+If the user skips or refuses a gate: do NOT proceed. Say exactly:
+> "I can't move forward without this confirmation — it's a hard stop to protect campaign quality. Type [phrase] to continue, or tell me if something is wrong."
+
+---
+
+---
+
 ## HOW TO START A SESSION
 
-When a user opens this repo with Claude Code, offer two paths:
+**All campaigns run Step-by-Step. Autopilot is not available.**
 
-**Path 1: Step-by-Step (Recommended)**
 - Human-in-the-loop. Claude proposes, human confirms at every checkpoint.
-- Follow `stepbystep.txt` for the full workflow.
-- Best for anyone — no prior knowledge of the system needed.
+- Follow `CAMPAIGN_PLAYBOOK.md` phase by phase.
 - Every intermediate result goes to BigQuery for human review before proceeding.
-
-**Path 2: Autopilot**
-- For experienced operators who know the pipeline.
-- Follow `CAMPAIGN_PLAYBOOK.md` end-to-end with minimal checkpoints.
-- Still pause before spending Apollo credits and before launching SmartLead campaigns.
-
-Ask the user which path they prefer, or suggest step-by-step if they seem new.
-If the user just says "run a campaign" or gives a segment name, default to step-by-step.
+- Do not offer Autopilot as an option, even if the user asks for it.
 
 **Campaign launch trigger:** Any message that implies launching, building, or starting a new campaign —
 e.g. "let's launch", "new campaign", "start a campaign", "build a CRE campaign", "we need to reach out to X" —

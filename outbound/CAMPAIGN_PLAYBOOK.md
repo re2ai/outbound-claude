@@ -368,6 +368,34 @@ Do NOT use: `"commercial real estate x local businesses"`, `"tenant sourcing ser
 For HyperPersonal campaigns (listing enrichment done): `"your listing at [ADDRESS]"` is the gold standard.
 For non-enriched campaigns: use the generic inquiry format — `"retail tenant question"` is proven at scale.
 
+#### CRE Copy Language Rules *(also apply to BB — check before generating any copy)*
+
+**1. Never use generic audience labels — always name the owner type**
+- ❌ `"office users"`, `"tenants"`, `"businesses"` — too vague, sounds mass-blast
+- ✅ `"shop owners"`, `"coffee shop owners"`, `"gym owners"`, `"restaurant owners"` — specific, credible
+- Worst case fallback (no enrichment data): `"small business owners"` — still better than "office users"
+- Always reference **owners**, not businesses: we have owner contact info — make that clear
+- Source from enrichment/scrape data when available. If no specific type is known, use the most likely tenant type for the property address/zone.
+
+**2. Always add "local" to describe the business type (strong recommendation)**
+- ✅ `"local shop owners"`, `"local coffee shop owners"`, `"local gym owners"`
+- Reinforces that our database covers brick-and-mortar / local businesses, not enterprise or e-commerce
+
+**3. Never use "looking for space" — use intent-softened phrasing**
+- ❌ `"looking for space"` — asserts intent we can't confirm, sounds presumptuous
+- ⚠️ Acceptable: `"might be looking for space"` (softened, still usable)
+- ✅ Preferred: `"might be a potential tenant"`, `"could be a great fit for that space"`, `"that could be a great fit if you're searching for a local business for that space"`
+
+**4. CTA must frame Resquared as helping the broker connect — not doing it for them**
+- We help them reach and connect to the right people. We don't guarantee introductions or manage the relationship for them.
+- ✅ `"Would you be interested in how we could help you connect with them?"`
+- ✅ `"Would it make sense for us to show you how to connect to them?"`
+- ✅ `"Do you want to schedule a quick meeting so we can show you how easy it can be to reach them?"`
+- Variables (address, business type, city) can be injected — the frame stays the same: *we show you how to reach them*
+- ❌ Avoid implying we send the introduction or that the broker doesn't need to do any outreach
+
+---
+
 #### CRE — Email 1 Winning Structure
 
 **Best performing template (12.5% on small n, 5-7% at scale):**
@@ -376,7 +404,7 @@ Hi [Name],
 
 What type of retail tenant did you have in mind for [ADDRESS]?
 
-We have [N] retail tenants in [City] looking for space — happy to share the list if it's useful.
+We have contact info for [N] local [business type] owners in [City] that might be potential tenants — happy to share if it's useful.
 
 [Sender]
 ```
@@ -387,9 +415,9 @@ Hey [Name],
 
 For the space available at [ADDRESS], were you open to a [tenant type]?
 
-We have contact info for over [N] [tenant type] operators in [City] and 15M local biz across the US.
+We have contact info for over [N] local [business type] owners in [City] that could be a great fit for that space.
 
-Not sure what use you had in mind! Let me know what type of use you are targeting and I can share more info!
+Would you be interested in how we could help you connect with them?
 
 [Sender]
 ```
