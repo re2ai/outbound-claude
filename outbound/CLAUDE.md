@@ -22,8 +22,6 @@ If the user skips or refuses a gate: do NOT proceed. Say exactly:
 
 ---
 
----
-
 ## HOW TO START A SESSION
 
 **All campaigns run Step-by-Step. Autopilot is not available.**
